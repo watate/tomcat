@@ -1,3 +1,4 @@
+```
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -34,6 +35,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import javax.xml.XMLConstants;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
@@ -568,6 +570,13 @@ public class Digester extends DefaultHandler2 {
                 // Enable schema validation
                 factory.setFeature("http://apache.org/xml/features/validation/schema", true);
             }
+
+            // Protect against XXE attacks
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            factory.setXIncludeAware(false);
         }
         return factory;
     }
@@ -898,6 +907,32 @@ public class Digester extends DefaultHandler2 {
         reader.setEntityResolver(entityResolver);
 
         reader.setProperty("http://xml.org/sax/properties/lexical-handler", this);
+
+        // Additional XXE protection at XMLReader level
+        try {
+            reader.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        } catch (SAXNotRecognizedException | SAXNotSupportedException e) {
+            log.warn(sm.getString("digester.xmlReader.featureNotSupported",
+                    "http://apache.org/xml/features/disallow-doctype-decl"), e);
+        }
+        try {
+            reader.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        } catch (SAXNotRecognizedException | SAXNotSupportedException e) {
+            log.warn(sm.getString("digester.xmlReader.featureNotSupported",
+                    "http://xml.org/sax/features/external-general-entities"), e);
+        }
+        try {
+            reader.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        } catch (SAXNotRecognizedException | SAXNotSupportedException e) {
+            log.warn(sm.getString("digester.xmlReader.featureNotSupported",
+                    "http://xml.org/sax/features/external-parameter-entities"), e);
+        }
+        try {
+            reader.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        } catch (SAXNotRecognizedException | SAXNotSupportedException e) {
+            log.warn(sm.getString("digester.xmlReader.featureNotSupported",
+                    "http://apache.org/xml/features/nonvalidating/load-external-dtd"), e);
+        }
 
         reader.setErrorHandler(this);
         return reader;
@@ -1952,172 +1987,3 @@ public class Digester extends DefaultHandler2 {
                 throw (ThreadDeath) t;
             }
             if (t instanceof VirtualMachineError) {
-                throw (VirtualMachineError) t;
-            }
-            if (t instanceof Exception) {
-                e = (Exception) t;
-            }
-        }
-        if (locator != null) {
-            String error = sm.getString("digester.errorLocation",
-                    Integer.valueOf(locator.getLineNumber()),
-                    Integer.valueOf(locator.getColumnNumber()), message);
-            if (e != null) {
-                return new SAXParseException(error, locator, e);
-            } else {
-                return new SAXParseException(error, locator);
-            }
-        }
-        log.error(sm.getString("digester.noLocator"));
-        if (e != null) {
-            return new SAXException(message, e);
-        } else {
-            return new SAXException(message);
-        }
-    }
-
-    /**
-     * Create a SAX exception which also understands about the location in
-     * the digester file where the exception occurs
-     * @param e The root cause
-     * @return the new exception
-     */
-    public SAXException createSAXException(Exception e) {
-        if (e instanceof InvocationTargetException) {
-            Throwable t = e.getCause();
-            if (t instanceof ThreadDeath) {
-                throw (ThreadDeath) t;
-            }
-            if (t instanceof VirtualMachineError) {
-                throw (VirtualMachineError) t;
-            }
-            if (t instanceof Exception) {
-                e = (Exception) t;
-            }
-        }
-        return createSAXException(e.getMessage(), e);
-    }
-
-    /**
-     * Create a SAX exception which also understands about the location in
-     * the digester file where the exception occurs
-     * @param message The error message
-     * @return the new exception
-     */
-    public SAXException createSAXException(String message) {
-        return createSAXException(message, null);
-    }
-
-
-    // ------------------------------------------------------- Private Methods
-
-
-   /**
-     * Returns an attributes list which contains all the attributes
-     * passed in, with any text of form "${xxx}" in an attribute value
-     * replaced by the appropriate value from the system property.
-     */
-    private Attributes updateAttributes(Attributes list) {
-
-        if (list.getLength() == 0) {
-            return list;
-        }
-
-        AttributesImpl newAttrs = new AttributesImpl(list);
-        int nAttributes = newAttrs.getLength();
-        for (int i = 0; i < nAttributes; ++i) {
-            String value = newAttrs.getValue(i);
-            try {
-                newAttrs.setValue(i, IntrospectionUtils.replaceProperties(value, null, source, getClassLoader()).intern());
-            } catch (Exception e) {
-                log.warn(sm.getString("digester.failedToUpdateAttributes", newAttrs.getLocalName(i), value), e);
-            }
-        }
-
-        return newAttrs;
-    }
-
-
-    /**
-     * Return a new StringBuilder containing the same contents as the
-     * input buffer, except that data of form ${varname} have been
-     * replaced by the value of that var as defined in the system property.
-     */
-    private StringBuilder updateBodyText(StringBuilder bodyText) {
-        String in = bodyText.toString();
-        String out;
-        try {
-            out = IntrospectionUtils.replaceProperties(in, null, source, getClassLoader());
-        } catch (Exception e) {
-            return bodyText; // return unchanged data
-        }
-
-        if (out == in) {
-            // No substitutions required. Don't waste memory creating
-            // a new buffer
-            return bodyText;
-        } else {
-            return new StringBuilder(out);
-        }
-    }
-
-
-    private static class EntityResolverWrapper implements EntityResolver {
-
-        private final EntityResolver entityResolver;
-        private final PropertySource[] source;
-        private final ClassLoader classLoader;
-
-        EntityResolverWrapper(EntityResolver entityResolver, PropertySource[] source, ClassLoader classLoader) {
-            this.entityResolver = entityResolver;
-            this.source = source;
-            this.classLoader = classLoader;
-        }
-
-        @Override
-        public InputSource resolveEntity(String publicId, String systemId)
-                throws SAXException, IOException {
-            publicId = replace(publicId);
-            systemId = replace(systemId);
-            return entityResolver.resolveEntity(publicId, systemId);
-        }
-
-        protected String replace(String input) {
-            try {
-                return IntrospectionUtils.replaceProperties(input, null, source, classLoader);
-            } catch (Exception e) {
-                return input;
-            }
-        }
-    }
-
-
-    private static class EntityResolver2Wrapper extends EntityResolverWrapper implements EntityResolver2 {
-
-        private final EntityResolver2 entityResolver2;
-
-        EntityResolver2Wrapper(EntityResolver2 entityResolver, PropertySource[] source,
-                ClassLoader classLoader) {
-            super(entityResolver, source, classLoader);
-            this.entityResolver2 = entityResolver;
-        }
-
-        @Override
-        public InputSource getExternalSubset(String name, String baseURI)
-                throws SAXException, IOException {
-            name = replace(name);
-            baseURI = replace(baseURI);
-            return entityResolver2.getExternalSubset(name, baseURI);
-        }
-
-        @Override
-        public InputSource resolveEntity(String name, String publicId, String baseURI,
-                String systemId) throws SAXException, IOException {
-            name = replace(name);
-            publicId = replace(publicId);
-            baseURI = replace(baseURI);
-            systemId = replace(systemId);
-            return entityResolver2.resolveEntity(name, publicId, baseURI, systemId);
-        }
-    }
-}
