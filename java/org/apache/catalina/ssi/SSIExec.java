@@ -21,6 +21,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.util.regex.Pattern;
 
 import org.apache.catalina.util.IOTools;
 import org.apache.tomcat.util.res.StringManager;
@@ -37,6 +38,33 @@ public class SSIExec implements SSICommand {
     private static final StringManager sm = StringManager.getManager(SSIExec.class);
     protected final SSIInclude ssiInclude = new SSIInclude();
     protected static final int BUFFER_SIZE = 1024;
+
+    /**
+     * Pattern that matches only safe characters for command execution.
+     * Allows alphanumeric characters, hyphens, underscores, dots, forward slashes,
+     * spaces, and equals signs. Rejects shell metacharacters such as
+     * ;, |, &, $, `, (, ), {, }, <, >, !, ~, ^, *, ?, [, ], \, ", ', newline, etc.
+     */
+    private static final Pattern SAFE_COMMAND_PATTERN =
+            Pattern.compile("^[a-zA-Z0-9\\-_./= ]+$");
+
+    /**
+     * Validates that the command string does not contain dangerous shell metacharacters.
+     *
+     * @param command the command string to validate
+     * @return true if the command is considered safe, false otherwise
+     */
+    private static boolean isValidCommand(String command) {
+        if (command == null || command.isEmpty()) {
+            return false;
+        }
+        // Reject commands with path traversal
+        if (command.contains("..")) {
+            return false;
+        }
+        // Only allow safe characters
+        return SAFE_COMMAND_PATTERN.matcher(command).matches();
+    }
 
 
     /**
@@ -55,10 +83,17 @@ public class SSIExec implements SSICommand {
                     new String[]{"virtual"}, new String[]{substitutedValue},
                     writer);
         } else if (paramName.equalsIgnoreCase("cmd")) {
+            if (!isValidCommand(substitutedValue)) {
+                ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue),
+                        new IOException("Command rejected: contains invalid characters or patterns"));
+                writer.write(configErrMsg);
+                return lastModified;
+            }
             boolean foundProgram = false;
             try {
-                Runtime rt = Runtime.getRuntime();
-                Process proc = rt.exec(substitutedValue);
+                ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", substitutedValue);
+                pb.redirectErrorStream(false);
+                Process proc = pb.start();
                 foundProgram = true;
                 BufferedReader stdOutReader = new BufferedReader(
                         new InputStreamReader(proc.getInputStream()));
