@@ -18,10 +18,12 @@ package org.apache.catalina.tribes.io;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectStreamClass;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
+import java.util.regex.Pattern;
 
 import org.apache.catalina.tribes.util.StringManager;
 
@@ -38,9 +40,39 @@ public final class ReplicationStream extends ObjectInputStream {
     static final StringManager sm = StringManager.getManager(ReplicationStream.class);
 
     /**
+     * Default pattern that allows Java standard library types and
+     * Apache Tomcat types that are expected during cluster replication.
+     * This prevents deserialization of arbitrary classes.
+     */
+    private static final Pattern DEFAULT_ALLOWED_CLASS_PATTERN = Pattern.compile(
+            "java\\.lang\\..*" +
+            "|java\\.util\\..*" +
+            "|java\\.io\\..*" +
+            "|java\\.math\\..*" +
+            "|java\\.sql\\..*" +
+            "|java\\.net\\..*" +
+            "|javax\\.management\\..*" +
+            "|org\\.apache\\.catalina\\..*" +
+            "|\\[B" +
+            "|\\[C" +
+            "|\\[S" +
+            "|\\[I" +
+            "|\\[J" +
+            "|\\[F" +
+            "|\\[D" +
+            "|\\[Z" +
+            "|\\[L.*"
+    );
+
+    /**
      * The class loader we will use to resolve classes.
      */
     private ClassLoader[] classLoaders = null;
+
+    /**
+     * The pattern used to filter allowed classes during deserialization.
+     */
+    private Pattern allowedClassNamePattern = DEFAULT_ALLOWED_CLASS_PATTERN;
 
     /**
      * Construct a new instance of CustomObjectInputStream
@@ -67,10 +99,24 @@ public final class ReplicationStream extends ObjectInputStream {
      * @exception ClassNotFoundException if this class cannot be found
      * @exception IOException if an input/output error occurs
      */
+    /**
+     * Set a custom allowed class name pattern for deserialization filtering.
+     *
+     * @param pattern The regex pattern that class names must match
+     */
+    public void setAllowedClassNamePattern(Pattern pattern) {
+        this.allowedClassNamePattern = pattern;
+    }
+
     @Override
     public Class<?> resolveClass(ObjectStreamClass classDesc)
         throws ClassNotFoundException, IOException {
         String name = classDesc.getName();
+        if (allowedClassNamePattern != null && !allowedClassNamePattern.matcher(name).matches()) {
+            throw new InvalidClassException(
+                    sm.getString("replicationStream.classNotAllowed", name,
+                            allowedClassNamePattern.toString()));
+        }
         try {
             return resolveClass(name);
         } catch (ClassNotFoundException e) {

@@ -555,6 +555,11 @@ public class Digester extends DefaultHandler2 {
         if (factory == null) {
             factory = SAXParserFactory.newInstance();
 
+            // Protect against XXE attacks
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+
             factory.setNamespaceAware(namespaceAware);
             // Preserve xmlns attributes
             if (namespaceAware) {

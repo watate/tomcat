@@ -20,7 +20,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
@@ -576,8 +575,7 @@ public class XByteBuffer implements Serializable {
         }
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
-            ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            ReplicationStream stream = new ReplicationStream(instream,cls);
             message = stream.readObject();
             instream.close();
             stream.close();
