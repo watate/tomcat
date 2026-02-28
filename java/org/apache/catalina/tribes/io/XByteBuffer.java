@@ -20,10 +20,16 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.catalina.tribes.util.StringManager;
@@ -62,6 +68,40 @@ public class XByteBuffer implements Serializable {
      * This is the package footer, 7 bytes (TLF2003)
      */
     private static final byte[] END_DATA = {84,76,70,50,48,48,51};
+
+    /**
+     * Set of class name prefixes that are allowed during deserialization.
+     * This acts as a whitelist to prevent deserialization of arbitrary classes.
+     */
+    private static final Set<String> ALLOWED_CLASS_PREFIXES;
+
+    static {
+        Set<String> set = new HashSet<>();
+        set.add("org.apache.catalina.tribes.");
+        set.add("java.lang.");
+        set.add("java.util.");
+        set.add("java.io.");
+        set.add("[B"); // byte arrays
+        set.add("[C"); // char arrays
+        set.add("[I"); // int arrays
+        set.add("[J"); // long arrays
+        set.add("[S"); // short arrays
+        set.add("[Z"); // boolean arrays
+        set.add("[D"); // double arrays
+        set.add("[F"); // float arrays
+        // Allow additional classes via system property
+        String additional = System.getProperty("org.apache.catalina.tribes.io.XByteBuffer.ALLOWED_CLASSES");
+        if (additional != null) {
+            String[] classes = additional.split(",");
+            for (String cls : classes) {
+                String trimmed = cls.trim();
+                if (!trimmed.isEmpty()) {
+                    set.add(trimmed);
+                }
+            }
+        }
+        ALLOWED_CLASS_PREFIXES = Collections.unmodifiableSet(set);
+    }
 
     /**
      * Variable to hold the data
@@ -554,6 +594,80 @@ public class XByteBuffer implements Serializable {
         return result;
     }
 
+    /**
+     * A filtering ObjectInputStream that validates class names against a whitelist
+     * before allowing deserialization.
+     */
+    private static class FilteredObjectInputStream extends ObjectInputStream {
+
+        private final ClassLoader[] classLoaders;
+
+        FilteredObjectInputStream(InputStream in, ClassLoader[] cls) throws IOException {
+            super(in);
+            this.classLoaders = cls;
+        }
+
+        @Override
+        protected Class<?> resolveClass(ObjectStreamClass desc)
+                throws IOException, ClassNotFoundException {
+            String className = desc.getName();
+            checkAllowedClass(className);
+            if (classLoaders != null && classLoaders.length > 0) {
+                for (ClassLoader cl : classLoaders) {
+                    try {
+                        return Class.forName(className, false, cl);
+                    } catch (ClassNotFoundException e) {
+                        // try next
+                    }
+                }
+            }
+            return super.resolveClass(desc);
+        }
+
+        private void checkAllowedClass(String className) throws InvalidClassException {
+            // Always allow primitive types and their arrays
+            if (className.length() <= 2) {
+                // Primitive type descriptors like "B", "C", "D", "F", "I", "J", "S", "Z"
+                // and array prefixes like "[B", "[C", etc.
+                return;
+            }
+            for (String prefix : ALLOWED_CLASS_PREFIXES) {
+                if (className.startsWith(prefix)) {
+                    return;
+                }
+            }
+            // Allow array types of allowed classes (e.g., "[Lorg.apache.catalina.tribes.xxx;")
+            if (className.startsWith("[L")) {
+                String elementClass = className.substring(2, className.length() - 1);
+                for (String prefix : ALLOWED_CLASS_PREFIXES) {
+                    if (elementClass.startsWith(prefix)) {
+                        return;
+                    }
+                }
+            }
+            // Allow multi-dimensional arrays
+            if (className.startsWith("[")) {
+                String inner = className;
+                while (inner.startsWith("[")) {
+                    inner = inner.substring(1);
+                }
+                if (inner.length() <= 1) {
+                    return; // primitive array
+                }
+                if (inner.startsWith("L") && inner.endsWith(";")) {
+                    String elementClass = inner.substring(1, inner.length() - 1);
+                    for (String prefix : ALLOWED_CLASS_PREFIXES) {
+                        if (elementClass.startsWith(prefix)) {
+                            return;
+                        }
+                    }
+                }
+            }
+            throw new InvalidClassException(
+                    "Deserialization of class " + className + " is not allowed. " +
+                    "Class does not match the allowed whitelist.");
+        }
+    }
 
     public static Serializable deserialize(byte[] data)
         throws IOException, ClassNotFoundException, ClassCastException {
@@ -577,7 +691,7 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            stream = new FilteredObjectInputStream(instream, cls);
             message = stream.readObject();
             instream.close();
             stream.close();
