@@ -712,6 +712,16 @@ public class Digester extends DefaultHandler2 {
         // Create a new parser
         try {
             parser = getFactory().newSAXParser();
+
+            // Protect against XXE attacks by restricting external access
+            try {
+                parser.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                parser.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+            } catch (SAXNotRecognizedException | SAXNotSupportedException e) {
+                // Property may not be supported by all parsers, features on
+                // factory still provide protection
+                log.warn(sm.getString("digester.xmlParserPropertyError"), e);
+            }
         } catch (Exception e) {
             log.error(sm.getString("digester.createParserError"), e);
             return null;
