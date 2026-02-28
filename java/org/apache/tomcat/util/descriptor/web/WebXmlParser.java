@@ -58,12 +58,12 @@ public class WebXmlParser {
             boolean blockExternal) {
         webRuleSet = new WebRuleSet(false);
         webDigester = DigesterFactory.newDigester(validation,
-                namespaceAware, webRuleSet, blockExternal);
+                namespaceAware, webRuleSet, true);
         webDigester.getParser();
 
         webFragmentRuleSet = new WebRuleSet(true);
         webFragmentDigester = DigesterFactory.newDigester(validation,
-                namespaceAware, webFragmentRuleSet, blockExternal);
+                namespaceAware, webFragmentRuleSet, true);
         webFragmentDigester.getParser();
     }
 
