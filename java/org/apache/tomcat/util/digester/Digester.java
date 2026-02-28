@@ -1501,6 +1501,33 @@ public class Digester extends DefaultHandler2 {
     }
 
 
+    /**
+     * Configure the underlying XMLReader to prevent XML External Entity (XXE)
+     * attacks when parsing untrusted content.
+     */
+    private void secureXmlReader() {
+        XMLReader reader = getXMLReader();
+        if (reader == null) {
+            return;
+        }
+        try {
+            // Prefer disallowing DTDs entirely
+            reader.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        } catch (SAXNotRecognizedException | SAXNotSupportedException e) {
+            // Fallback: disable external entities
+            try {
+                reader.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            } catch (SAXNotRecognizedException | SAXNotSupportedException e1) {
+                // Ignore - best effort
+            }
+            try {
+                reader.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            } catch (SAXNotRecognizedException | SAXNotSupportedException e1) {
+                // Ignore - best effort
+            }
+        }
+    }
+
     // ------------------------------------------------------- Public Methods
 
     /**
@@ -1514,6 +1541,7 @@ public class Digester extends DefaultHandler2 {
      */
     public Object parse(File file) throws IOException, SAXException {
         configure();
+        secureXmlReader();
         InputSource input = new InputSource(new FileInputStream(file));
         input.setSystemId("file://" + file.getAbsolutePath());
         getXMLReader().parse(input);
@@ -1532,6 +1560,7 @@ public class Digester extends DefaultHandler2 {
      */
     public Object parse(InputSource input) throws IOException, SAXException {
         configure();
+        secureXmlReader();
         getXMLReader().parse(input);
         return root;
     }
@@ -1548,6 +1577,7 @@ public class Digester extends DefaultHandler2 {
      */
     public Object parse(InputStream input) throws IOException, SAXException {
         configure();
+        secureXmlReader();
         InputSource is = new InputSource(input);
         getXMLReader().parse(is);
         return root;
