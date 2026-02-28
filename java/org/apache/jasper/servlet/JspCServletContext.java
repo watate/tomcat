@@ -24,6 +24,8 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -390,8 +392,14 @@ public class JspCServletContext implements ServletContext {
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
+            URI baseUri = myResourceBaseURL.toURI();
+            URI resolved = baseUri.resolve(path);
+
+            if (isInvalidResolvedResource(baseUri, resolved)) {
+                return null;
+            }
+
+            url = resolved.toURL();
             try (InputStream is = url.openStream()) {
             }
         } catch (Throwable t) {
@@ -416,6 +424,47 @@ public class JspCServletContext implements ServletContext {
         return url;
     }
 
+    private boolean isInvalidResolvedResource(URI baseUri, URI resolved) {
+        if (resolved == null || baseUri == null) {
+            return true;
+        }
+
+        String baseScheme = baseUri.getScheme();
+        String resolvedScheme = resolved.getScheme();
+
+        if (baseScheme == null || resolvedScheme == null ||
+                !baseScheme.equalsIgnoreCase(resolvedScheme)) {
+            return true;
+        }
+
+        if ("file".equalsIgnoreCase(baseScheme)) {
+            try {
+                Path basePath = Paths.get(baseUri).normalize().toAbsolutePath();
+                Path resolvedPath = Paths.get(resolved).normalize().toAbsolutePath();
+                if (!resolvedPath.startsWith(basePath)) {
+                    return true;
+                }
+            } catch (Exception e) {
+                return true;
+            }
+        } else {
+            String baseHost = baseUri.getHost();
+            String resolvedHost = resolved.getHost();
+            int basePort = baseUri.getPort();
+            int resolvedPort = resolved.getPort();
+
+            if (baseHost != null || resolvedHost != null) {
+                if (baseHost == null || resolvedHost == null ||
+                        !baseHost.equalsIgnoreCase(resolvedHost) ||
+                        basePort != resolvedPort) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
 
     /**
      * Return an InputStream allowing access to the resource at the
@@ -426,7 +475,11 @@ public class JspCServletContext implements ServletContext {
     @Override
     public InputStream getResourceAsStream(String path) {
         try {
-            return getResource(path).openStream();
+            URL resource = getResource(path);
+            if (resource == null) {
+                return null;
+            }
+            return resource.openStream();
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             return null;
