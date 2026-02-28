@@ -576,8 +576,7 @@ public class XByteBuffer implements Serializable {
         }
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
-            ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            ObjectInputStream stream = new ReplicationStream(instream, cls);
             message = stream.readObject();
             instream.close();
             stream.close();
