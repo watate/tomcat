@@ -417,6 +417,9 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
         }
 
         String normalized = RequestUtil.normalize(virtualPath);
+        if (normalized == null) {
+            throw new IOException(sm.getString("ssiServletExternalResolver.normalizationError", virtualPath));
+        }
         if (isVirtualWebappRelative) {
             return new ServletContextAndPath(context, normalized);
         }
@@ -475,6 +478,10 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
         String path = csAndP.getPath();
         URL url = context.getResource(path);
         if (url == null) {
+            throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
+        }
+        String protocol = url.getProtocol();
+        if (!"file".equalsIgnoreCase(protocol) && !"jar".equalsIgnoreCase(protocol)) {
             throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
         }
         URLConnection urlConnection = url.openConnection();
