@@ -20,6 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -575,12 +577,39 @@ public class XByteBuffer implements Serializable {
             cls = new ClassLoader[0];
         }
         if (data != null && length > 0) {
-            InputStream  instream = new ByteArrayInputStream(data,offset,length);
-            ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
-            message = stream.readObject();
-            instream.close();
-            stream.close();
+            InputStream instream = new ByteArrayInputStream(data,offset,length);
+            ObjectInputStream stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            try {
+                stream.setObjectInputFilter(new ObjectInputFilter() {
+                    @Override
+                    public Status checkInput(FilterInfo filterInfo) {
+                        Class<?> serialClass = filterInfo.serialClass();
+                        if (serialClass == null) {
+                            return Status.UNDECIDED;
+                        }
+                        if (serialClass.isArray()) {
+                            return Status.ALLOWED;
+                        }
+                        if (Serializable.class.isAssignableFrom(serialClass) &&
+                                serialClass.getName().startsWith("org.apache.catalina.tribes.")) {
+                            return Status.ALLOWED;
+                        }
+                        if (serialClass == String.class ||
+                                Number.class.isAssignableFrom(serialClass) ||
+                                serialClass == Boolean.class ||
+                                serialClass == Character.class) {
+                            return Status.ALLOWED;
+                        }
+                        return Status.REJECTED;
+                    }
+                });
+                message = stream.readObject();
+            } catch (InvalidClassException ice) {
+                throw new ClassNotFoundException(ice.getMessage(), ice);
+            } finally {
+                stream.close();
+                instream.close();
+            }
         }
         if ( message == null ) {
             return null;
