@@ -390,8 +390,25 @@ public class JspCServletContext implements ServletContext {
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
+            URI baseUri = myResourceBaseURL.toURI();
+            URI resolved = baseUri.resolve(path).normalize();
+
+            // Prevent resolving to a different scheme/host (e.g. crafted absolute URLs)
+            if (!baseUri.getScheme().equalsIgnoreCase(resolved.getScheme()) ||
+                    !safeEquals(baseUri.getAuthority(), resolved.getAuthority())) {
+                throw new MalformedURLException(Localizer.getMessage("jsp.error.URLMustStartWithSlash", path));
+            }
+
+            // For file URLs, enforce path confinement to the base path
+            if ("file".equalsIgnoreCase(baseUri.getScheme())) {
+                File baseFile = new File(baseUri).getCanonicalFile();
+                File resolvedFile = new File(resolved).getCanonicalFile();
+                if (!resolvedFile.toPath().startsWith(baseFile.toPath())) {
+                    throw new MalformedURLException(Localizer.getMessage("jsp.error.URLMustStartWithSlash", path));
+                }
+            }
+
+            url = resolved.toURL();
             try (InputStream is = url.openStream()) {
             }
         } catch (Throwable t) {
@@ -414,6 +431,14 @@ public class JspCServletContext implements ServletContext {
             }
         }
         return url;
+    }
+
+
+    private static boolean safeEquals(String a, String b) {
+        if (a == null) {
+            return b == null;
+        }
+        return a.equalsIgnoreCase(b);
     }
 
 
