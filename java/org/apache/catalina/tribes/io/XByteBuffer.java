@@ -20,8 +20,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -567,6 +569,73 @@ public class XByteBuffer implements Serializable {
 
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
+    /**
+     * Allowed package prefixes for deserialization. Only classes from these
+     * packages (or Java primitive/array types) will be permitted during
+     * deserialization to prevent arbitrary class instantiation attacks.
+     */
+    private static final String[] ALLOWED_PACKAGE_PREFIXES = {
+        "org.apache.catalina.",
+        "org.apache.tomcat.",
+        "org.apache.juli.",
+        "java.lang.",
+        "java.util.",
+        "java.io.",
+        "java.math.",
+        "java.sql.",
+        "java.net.",
+        "java.time.",
+        "javax.management.",
+    };
+
+    /**
+     * Check if a class name is allowed for deserialization.
+     * Permits primitive types, array types (if the component type is allowed),
+     * and classes from the allowed package prefixes.
+     *
+     * @param className the fully qualified class name to check
+     * @return true if the class is allowed, false otherwise
+     */
+    static boolean isClassAllowed(String className) {
+        // Allow primitive type descriptors (e.g. "int", "long", "byte", etc.
+        // which appear as single-char codes like "B", "C", "D", "F", "I", "J", "S", "Z")
+        if (className.length() == 1) {
+            return true;
+        }
+        // Allow array types - strip leading '[' and check component type
+        if (className.startsWith("[")) {
+            // Primitive arrays like "[B", "[I", etc.
+            if (className.length() == 2) {
+                return true;
+            }
+            // Object arrays like "[Ljava.lang.String;"
+            // Multi-dimensional arrays like "[[B", "[[[Ljava.lang.String;"
+            String componentName = className;
+            while (componentName.startsWith("[")) {
+                componentName = componentName.substring(1);
+            }
+            // After stripping '[', primitive arrays will be a single char
+            if (componentName.length() == 1) {
+                return true;
+            }
+            // Object array component: "Lpackage.ClassName;"
+            if (componentName.startsWith("L") && componentName.endsWith(";")) {
+                componentName = componentName.substring(1, componentName.length() - 1);
+            }
+            return isClassNameInAllowedPackages(componentName);
+        }
+        return isClassNameInAllowedPackages(className);
+    }
+
+    private static boolean isClassNameInAllowedPackages(String className) {
+        for (String prefix : ALLOWED_PACKAGE_PREFIXES) {
+            if (className.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
         throws IOException, ClassNotFoundException, ClassCastException {
         invokecount.addAndGet(1);
@@ -577,7 +646,22 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            if (cls.length > 0) {
+                stream = new ReplicationStream(instream, cls);
+            } else {
+                stream = new ObjectInputStream(instream) {
+                    @Override
+                    protected Class<?> resolveClass(ObjectStreamClass classDesc)
+                            throws IOException, ClassNotFoundException {
+                        String className = classDesc.getName();
+                        if (!isClassAllowed(className)) {
+                            throw new InvalidClassException(
+                                sm.getString("xByteBuffer.deserialize.blocked", className));
+                        }
+                        return super.resolveClass(classDesc);
+                    }
+                };
+            }
             message = stream.readObject();
             instream.close();
             stream.close();

@@ -18,6 +18,7 @@ package org.apache.catalina.tribes.io;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectStreamClass;
 import java.lang.reflect.Modifier;
@@ -71,6 +72,10 @@ public final class ReplicationStream extends ObjectInputStream {
     public Class<?> resolveClass(ObjectStreamClass classDesc)
         throws ClassNotFoundException, IOException {
         String name = classDesc.getName();
+        if (!XByteBuffer.isClassAllowed(name)) {
+            throw new InvalidClassException(
+                sm.getString("replicationStream.deserialize.blocked", name));
+        }
         try {
             return resolveClass(name);
         } catch (ClassNotFoundException e) {
