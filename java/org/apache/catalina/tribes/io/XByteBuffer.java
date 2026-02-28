@@ -20,6 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -62,6 +64,44 @@ public class XByteBuffer implements Serializable {
      * This is the package footer, 7 bytes (TLF2003)
      */
     private static final byte[] END_DATA = {84,76,70,50,48,48,51};
+
+    /**
+     * Restrictive deserialization filter to prevent unsafe gadget deserialization.
+     */
+    private static final ObjectInputFilter DESERIALIZE_FILTER = info -> {
+        Class<?> serialClass = info.serialClass();
+        if (serialClass != null) {
+            if (serialClass.isArray()) {
+                Class<?> component = serialClass.getComponentType();
+                while (component != null && component.isArray()) {
+                    component = component.getComponentType();
+                }
+                if (component != null && !component.isPrimitive()) {
+                    String name = component.getName();
+                    if (!isAllowedSerializedClass(name)) {
+                        return ObjectInputFilter.Status.REJECTED;
+                    }
+                }
+            } else {
+                String name = serialClass.getName();
+                if (!isAllowedSerializedClass(name)) {
+                    return ObjectInputFilter.Status.REJECTED;
+                }
+            }
+        }
+
+        if (info.depth() > 50 || info.references() > 10000 || info.streamBytes() > 10_000_000) {
+            return ObjectInputFilter.Status.REJECTED;
+        }
+
+        return ObjectInputFilter.Status.UNDECIDED;
+    };
+
+    private static boolean isAllowedSerializedClass(String className) {
+        return className.startsWith("java.lang.")
+                || className.startsWith("java.util.")
+                || className.startsWith("org.apache.catalina.tribes.");
+    }
 
     /**
      * Variable to hold the data
@@ -578,9 +618,15 @@ public class XByteBuffer implements Serializable {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
             stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
-            message = stream.readObject();
-            instream.close();
-            stream.close();
+            stream.setObjectInputFilter(DESERIALIZE_FILTER);
+            try {
+                message = stream.readObject();
+            } catch (InvalidClassException e) {
+                throw new ClassNotFoundException("Deserialization rejected by filter", e);
+            } finally {
+                instream.close();
+                stream.close();
+            }
         }
         if ( message == null ) {
             return null;
