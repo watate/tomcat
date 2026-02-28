@@ -145,6 +145,41 @@ public class SSIServlet extends HttpServlet {
 
 
     /**
+     * Validate that a path is safe for resource lookup. The path must be
+     * a normalized, relative path without path traversal sequences.
+     *
+     * @param path the path to validate
+     * @return true if the path is safe, false otherwise
+     */
+    private boolean isValidPath(String path) {
+        if (path == null) {
+            return false;
+        }
+        // Reject path traversal attempts
+        if (path.contains("..") || path.contains("//")) {
+            return false;
+        }
+        // Must start with /
+        if (!path.startsWith("/")) {
+            return false;
+        }
+        // Reject encoded characters that could be used for traversal
+        if (path.contains("%")) {
+            return false;
+        }
+        // Reject backslashes
+        if (path.contains("\\")) {
+            return false;
+        }
+        // Reject null bytes
+        if (path.indexOf('\0') >= 0) {
+            return false;
+        }
+        return true;
+    }
+
+
+    /**
      * Process our request and locate right SSI command.
      *
      * @param req
@@ -162,9 +197,14 @@ public class SSIServlet extends HttpServlet {
                     + (buffered?"buffered ":"unbuffered ") + "resource '"
                     + path + "'");
         }
+        // Validate path to prevent SSRF and path traversal
+        if (!isValidPath(path)) {
+            res.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
         // Exclude any resource in the /WEB-INF and /META-INF subdirectories
         // (the "toUpperCase()" avoids problems on Windows systems)
-        if (path == null || path.toUpperCase(Locale.ENGLISH).startsWith("/WEB-INF")
+        if (path.toUpperCase(Locale.ENGLISH).startsWith("/WEB-INF")
                 || path.toUpperCase(Locale.ENGLISH).startsWith("/META-INF")) {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
@@ -172,6 +212,13 @@ public class SSIServlet extends HttpServlet {
         URL resource = servletContext.getResource(path);
         if (resource == null) {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+        // Validate that the resolved resource URL uses a safe protocol
+        // to prevent SSRF via protocol manipulation
+        String protocol = resource.getProtocol();
+        if (!"file".equals(protocol) && !"jndi".equals(protocol)) {
+            res.sendError(HttpServletResponse.SC_FORBIDDEN);
             return;
         }
         String resourceMimeType = servletContext.getMimeType(path);
