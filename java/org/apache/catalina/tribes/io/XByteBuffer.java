@@ -20,7 +20,9 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
+import java.io.ObjectInputFilter;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
@@ -578,9 +580,42 @@ public class XByteBuffer implements Serializable {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
             stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
-            message = stream.readObject();
-            instream.close();
-            stream.close();
+            stream.setObjectInputFilter(info -> {
+                Class<?> serialClass = info.serialClass();
+                if (serialClass != null) {
+                    if (serialClass.isArray()) {
+                        Class<?> component = serialClass;
+                        while (component.isArray()) {
+                            component = component.getComponentType();
+                        }
+                        if (component != null && !component.isPrimitive()) {
+                            String componentName = component.getName();
+                            if (!componentName.startsWith("java.lang.")
+                                    && !componentName.startsWith("org.apache.catalina.tribes.")) {
+                                return ObjectInputFilter.Status.REJECTED;
+                            }
+                        }
+                    } else if (!serialClass.isPrimitive()) {
+                        String className = serialClass.getName();
+                        if (!className.startsWith("java.lang.")
+                                && !className.startsWith("org.apache.catalina.tribes.")) {
+                            return ObjectInputFilter.Status.REJECTED;
+                        }
+                    }
+                }
+                if (info.depth() > 64 || info.references() > 10000 || info.streamBytes() > (10L * 1024L * 1024L)) {
+                    return ObjectInputFilter.Status.REJECTED;
+                }
+                return ObjectInputFilter.Status.UNDECIDED;
+            });
+            try {
+                message = stream.readObject();
+            } catch (InvalidClassException ice) {
+                throw ice;
+            } finally {
+                instream.close();
+                stream.close();
+            }
         }
         if ( message == null ) {
             return null;
