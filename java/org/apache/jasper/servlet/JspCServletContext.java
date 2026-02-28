@@ -390,8 +390,16 @@ public class JspCServletContext implements ServletContext {
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
+            URI baseUri = myResourceBaseURL.toURI();
+            URI resolved = baseUri.resolve(path).normalize();
+            if (!resolved.toString().startsWith(baseUri.normalize().toString())) {
+                return null;
+            }
+            if (!"file".equalsIgnoreCase(resolved.getScheme()) &&
+                    !"jar".equalsIgnoreCase(resolved.getScheme())) {
+                return null;
+            }
+            url = resolved.toURL();
             try (InputStream is = url.openStream()) {
             }
         } catch (Throwable t) {
@@ -426,7 +434,11 @@ public class JspCServletContext implements ServletContext {
     @Override
     public InputStream getResourceAsStream(String path) {
         try {
-            return getResource(path).openStream();
+            URL resource = getResource(path);
+            if (resource == null) {
+                return null;
+            }
+            return resource.openStream();
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             return null;
