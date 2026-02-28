@@ -174,6 +174,15 @@ public class SSIServlet extends HttpServlet {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
+
+        // Prevent SSRF by restricting processing to local web application resources only.
+        String protocol = resource.getProtocol();
+        if (protocol == null
+                || !(protocol.equals("file") || protocol.equals("jar") || protocol.equals("jndi"))) {
+            res.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+
         String resourceMimeType = servletContext.getMimeType(path);
         if (resourceMimeType == null) {
             resourceMimeType = "text/html";
