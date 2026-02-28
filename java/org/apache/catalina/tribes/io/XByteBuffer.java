@@ -20,10 +20,16 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.catalina.tribes.util.StringManager;
@@ -567,6 +573,92 @@ public class XByteBuffer implements Serializable {
 
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
+    /**
+     * Set of package prefixes allowed during deserialization. Classes whose
+     * fully-qualified name starts with one of these prefixes are permitted.
+     */
+    private static final Set<String> ALLOWED_PACKAGE_PREFIXES =
+        Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+            "java.",
+            "javax.",
+            "org.apache.catalina.",
+            "org.apache.tomcat.",
+            "org.apache.coyote.",
+            "org.apache.juli.",
+            "org.apache.naming.",
+            "org.apache.el.",
+            "["  // array types
+        )));
+
+    /**
+     * Set of class names that are explicitly denied during deserialization
+     * because they are commonly used in deserialization exploits.
+     */
+    private static final Set<String> DENIED_CLASSES =
+        Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+            "org.apache.commons.collections.functors.InvokerTransformer",
+            "org.apache.commons.collections.functors.InstantiateTransformer",
+            "org.apache.commons.collections4.functors.InvokerTransformer",
+            "org.apache.commons.collections4.functors.InstantiateTransformer",
+            "org.apache.xalan.xsltc.trax.TemplatesImpl",
+            "com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl",
+            "org.codehaus.groovy.runtime.ConvertedClosure",
+            "org.codehaus.groovy.runtime.MethodClosure",
+            "org.springframework.beans.factory.ObjectFactory",
+            "com.sun.rowset.JdbcRowSetImpl"
+        )));
+
+    /**
+     * Checks whether the given class name is allowed for deserialization.
+     * @param className the fully-qualified class name
+     * @throws InvalidClassException if the class is not allowed
+     */
+    static void checkDeserializationAllowed(String className) throws InvalidClassException {
+        if (DENIED_CLASSES.contains(className)) {
+            throw new InvalidClassException(sm.getString("xByteBuffer.deserialization.denied", className));
+        }
+        // Primitive types are always allowed
+        if (className.length() <= 8) {
+            // Check for primitive type names: boolean, byte, char, short, int, long, float, double
+            switch (className) {
+                case "boolean":
+                case "byte":
+                case "char":
+                case "short":
+                case "int":
+                case "long":
+                case "float":
+                case "double":
+                    return;
+                default:
+                    break;
+            }
+        }
+        for (String prefix : ALLOWED_PACKAGE_PREFIXES) {
+            if (className.startsWith(prefix)) {
+                return;
+            }
+        }
+        throw new InvalidClassException(sm.getString("xByteBuffer.deserialization.denied", className));
+    }
+
+    /**
+     * An ObjectInputStream that filters deserialized classes against an
+     * allow-list to prevent unsafe deserialization of arbitrary types.
+     */
+    private static final class FilteredObjectInputStream extends ObjectInputStream {
+        FilteredObjectInputStream(InputStream in) throws IOException {
+            super(in);
+        }
+
+        @Override
+        protected Class<?> resolveClass(ObjectStreamClass desc)
+                throws IOException, ClassNotFoundException {
+            checkDeserializationAllowed(desc.getName());
+            return super.resolveClass(desc);
+        }
+    }
+
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
         throws IOException, ClassNotFoundException, ClassCastException {
         invokecount.addAndGet(1);
@@ -577,7 +669,7 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            stream = (cls.length>0)? new ReplicationStream(instream,cls):new FilteredObjectInputStream(instream);
             message = stream.readObject();
             instream.close();
             stream.close();
