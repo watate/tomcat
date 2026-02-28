@@ -20,6 +20,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -567,6 +568,18 @@ public class XByteBuffer implements Serializable {
 
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
+    /**
+     * Deserialization filter that restricts which classes can be deserialized
+     * to prevent unsafe deserialization attacks. Only allows classes from
+     * trusted packages used by Tomcat's clustering/tribes implementation.
+     */
+    private static final ObjectInputFilter DESERIALIZATION_FILTER = ObjectInputFilter.Config.createFilter(
+            "org.apache.catalina.**;" +
+            "org.apache.tomcat.**;" +
+            "java.**;" +
+            "javax.**;" +
+            "!*");
+
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
         throws IOException, ClassNotFoundException, ClassCastException {
         invokecount.addAndGet(1);
@@ -578,6 +591,7 @@ public class XByteBuffer implements Serializable {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
             stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            stream.setObjectInputFilter(DESERIALIZATION_FILTER);
             message = stream.readObject();
             instream.close();
             stream.close();
