@@ -370,6 +370,40 @@ public class JspCServletContext implements ServletContext {
 
 
     /**
+     * Validate that the given path is a safe, context-relative path
+     * without path traversal sequences.
+     *
+     * @param path the path to validate
+     * @return true if the path is safe, false otherwise
+     */
+    private static boolean isValidContextPath(String path) {
+        if (path == null) {
+            return false;
+        }
+        // Must start with '/'
+        if (!path.startsWith("/")) {
+            return false;
+        }
+        // Reject path traversal sequences
+        String normalized = path.replace('\\', '/');
+        if (normalized.contains("/../") || normalized.contains("/./") ||
+                normalized.endsWith("/..") || normalized.endsWith("/.") ||
+                normalized.startsWith("../") || normalized.equals("..")) {
+            return false;
+        }
+        // Reject encoded traversal sequences
+        String decoded = normalized.replace("%2e", ".").replace("%2E", ".")
+                .replace("%2f", "/").replace("%2F", "/")
+                .replace("%5c", "/").replace("%5C", "/");
+        if (decoded.contains("/../") || decoded.contains("/./") ||
+                decoded.endsWith("/..") || decoded.endsWith("/.")) {
+            return false;
+        }
+        return true;
+    }
+
+
+    /**
      * Return a URL object of a resource that is mapped to the
      * specified context-relative path.
      *
@@ -385,15 +419,35 @@ public class JspCServletContext implements ServletContext {
             throw new MalformedURLException(Localizer.getMessage("jsp.error.URLMustStartWithSlash", path));
         }
 
+        // Validate path to prevent path traversal / SSRF
+        if (!isValidContextPath(path)) {
+            throw new MalformedURLException("Invalid context-relative path: " + path);
+        }
+
         // Strip leading '/'
-        path = path.substring(1);
+        String resourcePath = path.substring(1);
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
+            // Construct the URL safely by resolving against the base URL
+            URI baseUri = myResourceBaseURL.toURI();
+            URI resolvedUri = baseUri.resolve(new URI(null, null, resourcePath, null));
+
+            // Ensure the resolved URI is still under the base URL
+            String baseStr = baseUri.normalize().toString();
+            if (!baseStr.endsWith("/")) {
+                baseStr = baseStr + "/";
+            }
+            String resolvedStr = resolvedUri.normalize().toString();
+            if (!resolvedStr.startsWith(baseStr)) {
+                return null;
+            }
+
+            url = resolvedUri.toURL();
             try (InputStream is = url.openStream()) {
             }
+        } catch (URISyntaxException e) {
+            url = null;
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             url = null;
@@ -402,7 +456,7 @@ public class JspCServletContext implements ServletContext {
         // During initialisation, getResource() is called before resourceJARs is
         // initialised
         if (url == null && resourceJARs != null) {
-            String jarPath = "META-INF/resources/" + path;
+            String jarPath = "META-INF/resources/" + resourcePath;
             for (URL jarUrl : resourceJARs) {
                 try (Jar jar = JarFactory.newInstance(jarUrl)) {
                     if (jar.exists(jarPath)) {
