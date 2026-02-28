@@ -55,30 +55,9 @@ public class SSIExec implements SSICommand {
                     new String[]{"virtual"}, new String[]{substitutedValue},
                     writer);
         } else if (paramName.equalsIgnoreCase("cmd")) {
-            boolean foundProgram = false;
-            try {
-                Runtime rt = Runtime.getRuntime();
-                Process proc = rt.exec(substitutedValue);
-                foundProgram = true;
-                BufferedReader stdOutReader = new BufferedReader(
-                        new InputStreamReader(proc.getInputStream()));
-                BufferedReader stdErrReader = new BufferedReader(
-                        new InputStreamReader(proc.getErrorStream()));
-                char[] buf = new char[BUFFER_SIZE];
-                IOTools.flow(stdErrReader, writer, buf);
-                IOTools.flow(stdOutReader, writer, buf);
-                proc.waitFor();
-                lastModified = System.currentTimeMillis();
-            } catch (InterruptedException e) {
-                ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue), e);
-                writer.write(configErrMsg);
-            } catch (IOException e) {
-                if (!foundProgram) {
-                    // Apache doesn't output an error message if it can't find
-                    // a program
-                }
-                ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue), e);
-            }
+            // Disable #exec cmd to prevent command injection vulnerabilities.
+            ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue), null);
+            writer.write(configErrMsg);
         }
         return lastModified;
     }
