@@ -59,12 +59,53 @@ public class WebXmlParser {
         webRuleSet = new WebRuleSet(false);
         webDigester = DigesterFactory.newDigester(validation,
                 namespaceAware, webRuleSet, blockExternal);
+        secureDigester(webDigester);
         webDigester.getParser();
 
         webFragmentRuleSet = new WebRuleSet(true);
         webFragmentDigester = DigesterFactory.newDigester(validation,
                 namespaceAware, webFragmentRuleSet, blockExternal);
+        secureDigester(webFragmentDigester);
         webFragmentDigester.getParser();
+    }
+
+    /**
+     * Apply defensive configuration to the Digester to protect against
+     * XML External Entity (XXE) and related attacks when parsing
+     * untrusted XML.
+     */
+    private void secureDigester(Digester digester) {
+        if (digester == null) {
+            return;
+        }
+        try {
+            // Completely disallow DOCTYPE declarations
+            digester.setFeature(
+                    "http://apache.org/xml/features/disallow-doctype-decl", true);
+        } catch (Exception e) {
+            // Ignore if not supported by the underlying parser
+        }
+        try {
+            // Disable external general entities
+            digester.setFeature(
+                    "http://xml.org/sax/features/external-general-entities", false);
+        } catch (Exception e) {
+            // Ignore if not supported by the underlying parser
+        }
+        try {
+            // Disable external parameter entities
+            digester.setFeature(
+                    "http://xml.org/sax/features/external-parameter-entities", false);
+        } catch (Exception e) {
+            // Ignore if not supported by the underlying parser
+        }
+        try {
+            // Disable loading external DTDs
+            digester.setFeature(
+                    "http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        } catch (Exception e) {
+            // Ignore if not supported by the underlying parser
+        }
     }
 
     /**
