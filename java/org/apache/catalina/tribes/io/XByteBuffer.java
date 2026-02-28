@@ -20,10 +20,16 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.catalina.tribes.util.StringManager;
@@ -565,6 +571,51 @@ public class XByteBuffer implements Serializable {
         return deserialize(data,offset,length,null);
     }
 
+    /**
+     * Set of allowed class name prefixes for deserialization filtering.
+     * Only classes whose fully qualified names start with one of these
+     * prefixes will be allowed during deserialization to prevent
+     * unsafe deserialization attacks.
+     */
+    private static final Set<String> ALLOWED_CLASS_PREFIXES;
+    static {
+        Set<String> prefixes = new HashSet<>();
+        prefixes.add("java.");
+        prefixes.add("javax.");
+        prefixes.add("[" );  // array type descriptors
+        prefixes.add("org.apache.catalina.");
+        ALLOWED_CLASS_PREFIXES = Collections.unmodifiableSet(prefixes);
+    }
+
+    /**
+     * An ObjectInputStream subclass that validates class names against an
+     * allowlist before resolving them, to prevent deserialization of
+     * untrusted classes.
+     */
+    private static class FilteredObjectInputStream extends ObjectInputStream {
+        FilteredObjectInputStream(InputStream in) throws IOException {
+            super(in);
+        }
+
+        @Override
+        protected Class<?> resolveClass(ObjectStreamClass desc)
+                throws IOException, ClassNotFoundException {
+            String name = desc.getName();
+            boolean allowed = false;
+            for (String prefix : ALLOWED_CLASS_PREFIXES) {
+                if (name.startsWith(prefix)) {
+                    allowed = true;
+                    break;
+                }
+            }
+            if (!allowed) {
+                throw new InvalidClassException(
+                        sm.getString("xByteBuffer.classNotAllowed", name));
+            }
+            return super.resolveClass(desc);
+        }
+    }
+
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
@@ -577,7 +628,7 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            stream = (cls.length>0)? new ReplicationStream(instream,cls):new FilteredObjectInputStream(instream);
             message = stream.readObject();
             instream.close();
             stream.close();
