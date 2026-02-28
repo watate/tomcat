@@ -20,6 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -575,12 +577,41 @@ public class XByteBuffer implements Serializable {
             cls = new ClassLoader[0];
         }
         if (data != null && length > 0) {
-            InputStream  instream = new ByteArrayInputStream(data,offset,length);
+            InputStream instream = new ByteArrayInputStream(data, offset, length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
-            message = stream.readObject();
-            instream.close();
-            stream.close();
+            try {
+                stream = (cls.length > 0) ? new ReplicationStream(instream, cls) : new ObjectInputStream(instream);
+                stream.setObjectInputFilter(info -> {
+                    Class<?> serialClass = info.serialClass();
+                    if (serialClass != null) {
+                        if (serialClass.isPrimitive() || serialClass.isArray()) {
+                            return ObjectInputFilter.Status.UNDECIDED;
+                        }
+                        String name = serialClass.getName();
+                        if (name.startsWith("org.apache.catalina.tribes.") ||
+                                name.startsWith("java.lang.") ||
+                                name.startsWith("java.util.") ||
+                                name.startsWith("java.time.")) {
+                            return ObjectInputFilter.Status.UNDECIDED;
+                        }
+                        return ObjectInputFilter.Status.REJECTED;
+                    }
+                    return ObjectInputFilter.Status.UNDECIDED;
+                });
+                message = stream.readObject();
+            } catch (InvalidClassException ice) {
+                throw new IOException("Rejected deserialization attempt", ice);
+            } finally {
+                try {
+                    if (stream != null) {
+                        stream.close();
+                    } else {
+                        instream.close();
+                    }
+                } catch (IOException ioe) {
+                    // Ignore close exception
+                }
+            }
         }
         if ( message == null ) {
             return null;
