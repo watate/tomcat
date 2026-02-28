@@ -20,6 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -52,6 +54,10 @@ public class XByteBuffer implements Serializable {
 
     private static final Log log = LogFactory.getLog(XByteBuffer.class);
     protected static final StringManager sm = StringManager.getManager(XByteBuffer.class);
+
+    private static final ObjectInputFilter DESERIALIZE_FILTER = ObjectInputFilter.Config.createFilter(
+            "maxdepth=32;maxrefs=10000;maxbytes=10485760;" +
+            "java.base/*;java.util/*;java.lang/*;org.apache.catalina.tribes.*;!*");
 
     /**
      * This is a package header, 7 bytes (FLT2002)
@@ -578,9 +584,15 @@ public class XByteBuffer implements Serializable {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
             stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
-            message = stream.readObject();
-            instream.close();
-            stream.close();
+            stream.setObjectInputFilter(DESERIALIZE_FILTER);
+            try {
+                message = stream.readObject();
+            } catch (InvalidClassException e) {
+                throw new IOException("Deserialization rejected by security filter.", e);
+            } finally {
+                instream.close();
+                stream.close();
+            }
         }
         if ( message == null ) {
             return null;
