@@ -34,6 +34,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import javax.xml.XMLConstants;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
@@ -567,6 +568,14 @@ public class Digester extends DefaultHandler2 {
                 factory.setFeature("http://xml.org/sax/features/validation", true);
                 // Enable schema validation
                 factory.setFeature("http://apache.org/xml/features/validation/schema", true);
+            }
+
+            // Protect against XXE attacks
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            if (!validating) {
+                factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
             }
         }
         return factory;
