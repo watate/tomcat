@@ -18,6 +18,7 @@ package org.apache.catalina.ssi;
 
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLConnection;
@@ -467,6 +468,24 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
     }
 
 
+    /**
+     * Validates that the given URL is safe to connect to (i.e., it only
+     * references local resources via the servlet context and not arbitrary
+     * external URLs).
+     */
+    private void validateUrlIsSafe(URL url) throws IOException {
+        if (url == null) {
+            return;
+        }
+        String protocol = url.getProtocol();
+        // Only allow file-based and jndi-based protocols which are local resources
+        if (protocol != null && !protocol.equals("file") && !protocol.equals("jndi")) {
+            throw new IOException(sm.getString("ssiServletExternalResolver.noResource",
+                    url.toString()));
+        }
+    }
+
+
     protected URLConnection getURLConnection(String originalPath,
             boolean virtual) throws IOException {
         ServletContextAndPath csAndP = getServletContextAndPath(originalPath,
@@ -477,6 +496,8 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
         if (url == null) {
             throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
         }
+        // Validate that the resolved URL is safe (not an arbitrary external URL)
+        validateUrlIsSafe(url);
         URLConnection urlConnection = url.openConnection();
         return urlConnection;
     }
