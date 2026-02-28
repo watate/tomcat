@@ -22,12 +22,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 import javax.servlet.ServletContext;
+import javax.xml.parsers.ParserConfigurationException;
 
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.digester.Digester;
 import org.apache.tomcat.util.digester.RuleSet;
 import org.apache.tomcat.util.res.StringManager;
+import org.xml.sax.SAXNotRecognizedException;
+import org.xml.sax.SAXNotSupportedException;
 import org.xml.sax.ext.EntityResolver2;
 
 /**
@@ -183,6 +186,18 @@ public class DigesterFactory {
         EntityResolver2 resolver = new LocalResolver(SERVLET_API_PUBLIC_IDS,
                 SERVLET_API_SYSTEM_IDS, blockExternal);
         digester.setEntityResolver(resolver);
+        if (blockExternal) {
+            try {
+                digester.setFeature(
+                        "http://xml.org/sax/features/external-general-entities", false);
+                digester.setFeature(
+                        "http://xml.org/sax/features/external-parameter-entities", false);
+            } catch (ParserConfigurationException | SAXNotRecognizedException |
+                    SAXNotSupportedException e) {
+                throw new IllegalStateException(
+                        sm.getString("digesterFactory.configureXxePrevention"), e);
+            }
+        }
         if (rule != null) {
             digester.addRuleSet(rule);
         }
