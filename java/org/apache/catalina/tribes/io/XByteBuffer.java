@@ -20,10 +20,15 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.catalina.tribes.util.StringManager;
@@ -554,6 +559,91 @@ public class XByteBuffer implements Serializable {
         return result;
     }
 
+    /**
+     * Set of class name patterns allowed for deserialization.
+     * By default, allows common safe types used in Tribes clustering.
+     */
+    private static volatile Set<String> allowedClassNames = null;
+
+    /**
+     * Get the default set of allowed class name prefixes for deserialization.
+     * @return a set of allowed class name prefixes
+     */
+    private static Set<String> getDefaultAllowedClassNames() {
+        Set<String> set = new HashSet<>();
+        set.add("org.apache.catalina.tribes.");
+        set.add("org.apache.catalina.ha.");
+        set.add("java.lang.");
+        set.add("java.util.");
+        set.add("java.io.Serializable");
+        set.add("[B"); // byte arrays
+        return Collections.unmodifiableSet(set);
+    }
+
+    /**
+     * Set allowed class names for deserialization filtering.
+     * @param classNames the set of allowed class name prefixes
+     */
+    public static void setAllowedClassNames(Set<String> classNames) {
+        allowedClassNames = Collections.unmodifiableSet(new HashSet<>(classNames));
+    }
+
+    /**
+     * A filtering ObjectInputStream that only allows deserialization of
+     * classes that match the allowed class name prefixes.
+     */
+    private static class FilteredObjectInputStream extends ObjectInputStream {
+        private final Set<String> allowed;
+
+        FilteredObjectInputStream(InputStream in, Set<String> allowed) throws IOException {
+            super(in);
+            this.allowed = allowed;
+        }
+
+        @Override
+        protected Class<?> resolveClass(ObjectStreamClass desc)
+                throws IOException, ClassNotFoundException {
+            String className = desc.getName();
+            if (!isAllowed(className)) {
+                throw new InvalidClassException(
+                    "Deserialization of class " + className + " is not allowed");
+            }
+            return super.resolveClass(desc);
+        }
+
+        private boolean isAllowed(String className) {
+            // Allow primitive types and arrays of primitives
+            if (className.length() <= 2) {
+                return true;
+            }
+            // Allow arrays - check the component type
+            if (className.startsWith("[")) {
+                // Strip array prefixes and 'L' prefix for object arrays
+                String componentType = className;
+                while (componentType.startsWith("[")) {
+                    componentType = componentType.substring(1);
+                }
+                if (componentType.startsWith("L") && componentType.endsWith(";")) {
+                    componentType = componentType.substring(1, componentType.length() - 1);
+                }
+                // Primitive array component types (single char like B, I, J, etc.)
+                if (componentType.length() <= 1) {
+                    return true;
+                }
+                return isClassNameAllowed(componentType);
+            }
+            return isClassNameAllowed(className);
+        }
+
+        private boolean isClassNameAllowed(String className) {
+            for (String allowedPrefix : allowed) {
+                if (className.startsWith(allowedPrefix) || className.equals(allowedPrefix)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
 
     public static Serializable deserialize(byte[] data)
         throws IOException, ClassNotFoundException, ClassCastException {
@@ -577,7 +667,15 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            if (cls.length > 0) {
+                stream = new ReplicationStream(instream, cls);
+            } else {
+                Set<String> allowed = allowedClassNames;
+                if (allowed == null) {
+                    allowed = getDefaultAllowedClassNames();
+                }
+                stream = new FilteredObjectInputStream(instream, allowed);
+            }
             message = stream.readObject();
             instream.close();
             stream.close();
