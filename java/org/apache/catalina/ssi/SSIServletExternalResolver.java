@@ -477,6 +477,10 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
         if (url == null) {
             throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
         }
+        String protocol = url.getProtocol();
+        if (!"file".equalsIgnoreCase(protocol) && !"jar".equalsIgnoreCase(protocol)) {
+            throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
+        }
         URLConnection urlConnection = url.openConnection();
         return urlConnection;
     }
