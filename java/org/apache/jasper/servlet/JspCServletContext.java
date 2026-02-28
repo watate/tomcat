@@ -24,6 +24,8 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -103,6 +105,12 @@ public class JspCServletContext implements ServletContext {
 
 
     /**
+     * Canonical normalized base path used for file resources.
+     */
+    private final Path canonicalBasePath;
+
+
+    /**
      * Merged web.xml for the application.
      */
     private WebXml webXml;
@@ -143,8 +151,20 @@ public class JspCServletContext implements ServletContext {
         myLogWriter = aLogWriter;
         myResourceBaseURL = aResourceBaseURL;
         this.loader = classLoader;
+        this.canonicalBasePath = initCanonicalBasePath(aResourceBaseURL);
         this.webXml = buildMergedWebXml(validate, blockExternal);
         jspConfigDescriptor = webXml.getJspConfigDescriptor();
+    }
+
+    private Path initCanonicalBasePath(URL baseUrl) throws JasperException {
+        if (!"file".equals(baseUrl.getProtocol())) {
+            return null;
+        }
+        try {
+            return Paths.get(baseUrl.toURI()).toRealPath();
+        } catch (IOException | URISyntaxException e) {
+            throw new JasperException(e);
+        }
     }
 
     private WebXml buildMergedWebXml(boolean validate, boolean blockExternal)
@@ -386,13 +406,26 @@ public class JspCServletContext implements ServletContext {
         }
 
         // Strip leading '/'
-        path = path.substring(1);
+        String relativePath = path.substring(1);
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
-            try (InputStream is = url.openStream()) {
+            if ("file".equals(myResourceBaseURL.getProtocol()) && canonicalBasePath != null) {
+                Path candidate = canonicalBasePath.resolve(relativePath).normalize();
+                if (!candidate.startsWith(canonicalBasePath)) {
+                    throw new MalformedURLException("Invalid resource path: " + path);
+                }
+                if (candidate.toFile().isFile()) {
+                    url = candidate.toUri().toURL();
+                }
+            } else {
+                URI uri = new URI(myResourceBaseURL.toExternalForm() + relativePath);
+                if (!myResourceBaseURL.getProtocol().equalsIgnoreCase(uri.getScheme())) {
+                    throw new MalformedURLException("Invalid resource scheme: " + uri.getScheme());
+                }
+                url = uri.toURL();
+                try (InputStream is = url.openStream()) {
+                }
             }
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
@@ -402,7 +435,7 @@ public class JspCServletContext implements ServletContext {
         // During initialisation, getResource() is called before resourceJARs is
         // initialised
         if (url == null && resourceJARs != null) {
-            String jarPath = "META-INF/resources/" + path;
+            String jarPath = "META-INF/resources/" + relativePath;
             for (URL jarUrl : resourceJARs) {
                 try (Jar jar = JarFactory.newInstance(jarUrl)) {
                     if (jar.exists(jarPath)) {
@@ -426,7 +459,11 @@ public class JspCServletContext implements ServletContext {
     @Override
     public InputStream getResourceAsStream(String path) {
         try {
-            return getResource(path).openStream();
+            URL resource = getResource(path);
+            if (resource == null) {
+                return null;
+            }
+            return resource.openStream();
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             return null;
