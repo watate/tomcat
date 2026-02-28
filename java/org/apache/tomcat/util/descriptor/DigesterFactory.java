@@ -183,6 +183,17 @@ public class DigesterFactory {
         EntityResolver2 resolver = new LocalResolver(SERVLET_API_PUBLIC_IDS,
                 SERVLET_API_SYSTEM_IDS, blockExternal);
         digester.setEntityResolver(resolver);
+        try {
+            digester.setFeature(
+                    "http://xml.org/sax/features/external-general-entities", false);
+            digester.setFeature(
+                    "http://xml.org/sax/features/external-parameter-entities", false);
+            digester.setFeature(
+                    "http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Failed to configure XML parser for XXE prevention", e);
+        }
         if (rule != null) {
             digester.addRuleSet(rule);
         }
