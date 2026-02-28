@@ -170,7 +170,7 @@ public class SSIServlet extends HttpServlet {
             return;
         }
         URL resource = servletContext.getResource(path);
-        if (resource == null) {
+        if (resource == null || !isSafeResourceUrl(resource)) {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
@@ -229,5 +229,14 @@ public class SSIServlet extends HttpServlet {
             res.getWriter().write(text);
         }
         bufferedReader.close();
+    }
+
+    private boolean isSafeResourceUrl(URL resource) {
+        String protocol = resource.getProtocol();
+        if (protocol == null) {
+            return false;
+        }
+        String normalized = protocol.toLowerCase(Locale.ENGLISH);
+        return "file".equals(normalized) || "jar".equals(normalized);
     }
 }
