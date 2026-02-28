@@ -20,10 +20,15 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.catalina.tribes.util.StringManager;
@@ -81,6 +86,12 @@ public class XByteBuffer implements Serializable {
      *
      */
     protected boolean discard = true;
+
+    /**
+     * Set of class name patterns allowed for deserialization.
+     * If null or empty, a default safe set is used.
+     */
+    private static volatile Set<String> deserializationAllowedClassPatterns = null;
 
     /**
      * Constructs a new XByteBuffer.<br>
@@ -554,6 +565,79 @@ public class XByteBuffer implements Serializable {
         return result;
     }
 
+    /**
+     * Set the allowed class patterns for deserialization.
+     * @param patterns set of allowed class name patterns (prefix matching)
+     */
+    public static void setDeserializationAllowedClassPatterns(Set<String> patterns) {
+        if (patterns != null) {
+            deserializationAllowedClassPatterns = Collections.unmodifiableSet(new HashSet<>(patterns));
+        } else {
+            deserializationAllowedClassPatterns = null;
+        }
+    }
+
+    /**
+     * Get the default set of allowed class name prefixes for deserialization.
+     * @return a set of allowed class name prefixes
+     */
+    private static Set<String> getDefaultAllowedClassPrefixes() {
+        Set<String> defaults = new HashSet<>();
+        defaults.add("org.apache.catalina.tribes.");
+        defaults.add("java.lang.String");
+        defaults.add("java.lang.Number");
+        defaults.add("java.lang.Integer");
+        defaults.add("java.lang.Long");
+        defaults.add("java.lang.Boolean");
+        defaults.add("java.lang.Byte");
+        defaults.add("java.lang.Short");
+        defaults.add("java.lang.Float");
+        defaults.add("java.lang.Double");
+        defaults.add("java.lang.Character");
+        defaults.add("java.util.");
+        defaults.add("java.io.Serializable");
+        defaults.add("[B"); // byte arrays
+        defaults.add("[C"); // char arrays
+        defaults.add("[I"); // int arrays
+        defaults.add("[J"); // long arrays
+        defaults.add("[S"); // short arrays
+        defaults.add("[Z"); // boolean arrays
+        defaults.add("[D"); // double arrays
+        defaults.add("[F"); // float arrays
+        defaults.add("[L"); // object arrays
+        return defaults;
+    }
+
+    /**
+     * An ObjectInputStream that filters classes during deserialization.
+     */
+    private static class FilteredObjectInputStream extends ObjectInputStream {
+        private final Set<String> allowedPrefixes;
+
+        FilteredObjectInputStream(InputStream in, Set<String> allowedPrefixes) throws IOException {
+            super(in);
+            this.allowedPrefixes = allowedPrefixes;
+        }
+
+        @Override
+        protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
+            String className = desc.getName();
+            if (!isClassAllowed(className)) {
+                throw new InvalidClassException(
+                    "Deserialization of class " + className + " is not allowed");
+            }
+            return super.resolveClass(desc);
+        }
+
+        private boolean isClassAllowed(String className) {
+            for (String prefix : allowedPrefixes) {
+                if (className.startsWith(prefix)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
 
     public static Serializable deserialize(byte[] data)
         throws IOException, ClassNotFoundException, ClassCastException {
@@ -577,7 +661,15 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            Set<String> allowedPrefixes = deserializationAllowedClassPatterns;
+            if (allowedPrefixes == null) {
+                allowedPrefixes = getDefaultAllowedClassPrefixes();
+            }
+            if (cls.length > 0) {
+                stream = new ReplicationStream(instream, cls);
+            } else {
+                stream = new FilteredObjectInputStream(instream, allowedPrefixes);
+            }
             message = stream.readObject();
             instream.close();
             stream.close();
