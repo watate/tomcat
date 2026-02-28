@@ -20,6 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -578,6 +580,7 @@ public class XByteBuffer implements Serializable {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
             stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            stream.setObjectInputFilter(XByteBuffer::deserializationFilter);
             message = stream.readObject();
             instream.close();
             stream.close();
@@ -589,6 +592,52 @@ public class XByteBuffer implements Serializable {
         } else {
             throw new ClassCastException(sm.getString("xByteBuffer.wrong.class", message.getClass().getName()));
         }
+    }
+
+    private static ObjectInputFilter.Status deserializationFilter(ObjectInputFilter.FilterInfo info) {
+        Class<?> serialClass = info.serialClass();
+        if (serialClass != null) {
+            if (serialClass.isArray()) {
+                Class<?> component = serialClass.getComponentType();
+                while (component != null && component.isArray()) {
+                    component = component.getComponentType();
+                }
+                if (component != null && !component.isPrimitive()) {
+                    String name = component.getName();
+                    if (!isAllowedDeserializationClass(name)) {
+                        return ObjectInputFilter.Status.REJECTED;
+                    }
+                }
+            } else {
+                String name = serialClass.getName();
+                if (!isAllowedDeserializationClass(name)) {
+                    return ObjectInputFilter.Status.REJECTED;
+                }
+            }
+        }
+
+        long depth = info.depth();
+        if (depth > 50) {
+            return ObjectInputFilter.Status.REJECTED;
+        }
+
+        long refs = info.references();
+        if (refs > 10000) {
+            return ObjectInputFilter.Status.REJECTED;
+        }
+
+        long bytes = info.streamBytes();
+        if (bytes > 10_000_000) {
+            return ObjectInputFilter.Status.REJECTED;
+        }
+
+        return ObjectInputFilter.Status.UNDECIDED;
+    }
+
+    private static boolean isAllowedDeserializationClass(String className) {
+        return className.startsWith("java.lang.")
+                || className.startsWith("java.util.")
+                || className.startsWith("org.apache.catalina.tribes.");
     }
 
     /**
