@@ -391,7 +391,22 @@ public class JspCServletContext implements ServletContext {
         URL url = null;
         try {
             URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
+            URI normalizedUri = uri.normalize();
+            url = normalizedUri.toURL();
+
+            // Validate that the resolved URL uses a safe protocol to prevent SSRF
+            String protocol = url.getProtocol();
+            if (!"file".equals(protocol) && !"jar".equals(protocol)) {
+                return null;
+            }
+
+            // Ensure the normalized URL remains under the resource base URL
+            // to prevent path traversal attacks
+            String baseUrlStr = myResourceBaseURL.toExternalForm();
+            if (!normalizedUri.toString().startsWith(baseUrlStr)) {
+                return null;
+            }
+
             try (InputStream is = url.openStream()) {
             }
         } catch (Throwable t) {
