@@ -24,6 +24,8 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -103,6 +105,13 @@ public class JspCServletContext implements ServletContext {
 
 
     /**
+     * Canonical file-system base path used to prevent path traversal and SSRF
+     * when the resource base URL is file-based.
+     */
+    private final Path canonicalResourceBasePath;
+
+
+    /**
      * Merged web.xml for the application.
      */
     private WebXml webXml;
@@ -143,6 +152,17 @@ public class JspCServletContext implements ServletContext {
         myLogWriter = aLogWriter;
         myResourceBaseURL = aResourceBaseURL;
         this.loader = classLoader;
+
+        Path resolvedBasePath = null;
+        if ("file".equalsIgnoreCase(aResourceBaseURL.getProtocol())) {
+            try {
+                resolvedBasePath = Paths.get(aResourceBaseURL.toURI()).normalize().toRealPath();
+            } catch (IOException | URISyntaxException e) {
+                throw new JasperException(e);
+            }
+        }
+        this.canonicalResourceBasePath = resolvedBasePath;
+
         this.webXml = buildMergedWebXml(validate, blockExternal);
         jspConfigDescriptor = webXml.getJspConfigDescriptor();
     }
@@ -390,9 +410,31 @@ public class JspCServletContext implements ServletContext {
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
-            try (InputStream is = url.openStream()) {
+            if ("file".equalsIgnoreCase(myResourceBaseURL.getProtocol()) && canonicalResourceBasePath != null) {
+                Path requestedPath = canonicalResourceBasePath.resolve(path).normalize();
+                if (requestedPath.startsWith(canonicalResourceBasePath) && requestedPath.toFile().isFile()) {
+                    url = requestedPath.toUri().toURL();
+                }
+            } else {
+                URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
+                URL candidate = uri.toURL();
+
+                String baseHost = myResourceBaseURL.getHost();
+                String candidateHost = candidate.getHost();
+                int basePort = myResourceBaseURL.getPort();
+                int candidatePort = candidate.getPort();
+
+                boolean sameHost = (baseHost == null && candidateHost == null) ||
+                        (baseHost != null && baseHost.equalsIgnoreCase(candidateHost));
+                boolean samePort = basePort == candidatePort;
+
+                if (myResourceBaseURL.getProtocol().equalsIgnoreCase(candidate.getProtocol()) &&
+                        sameHost && samePort) {
+                    try (InputStream is = candidate.openStream()) {
+                        // Validate accessibility and existence
+                    }
+                    url = candidate;
+                }
             }
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
@@ -426,7 +468,11 @@ public class JspCServletContext implements ServletContext {
     @Override
     public InputStream getResourceAsStream(String path) {
         try {
-            return getResource(path).openStream();
+            URL resource = getResource(path);
+            if (resource == null) {
+                return null;
+            }
+            return resource.openStream();
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             return null;
