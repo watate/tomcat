@@ -170,7 +170,7 @@ public class SSIServlet extends HttpServlet {
             return;
         }
         URL resource = servletContext.getResource(path);
-        if (resource == null) {
+        if (resource == null || !isAllowedResourceURL(resource)) {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
@@ -229,5 +229,16 @@ public class SSIServlet extends HttpServlet {
             res.getWriter().write(text);
         }
         bufferedReader.close();
+    }
+
+    /**
+     * Restrict URL protocols to local servlet-context resources only to prevent SSRF.
+     *
+     * @param resource URL to validate
+     * @return true if URL uses an allowed local protocol
+     */
+    protected boolean isAllowedResourceURL(URL resource) {
+        String protocol = resource.getProtocol();
+        return "file".equalsIgnoreCase(protocol) || "jar".equalsIgnoreCase(protocol);
     }
 }
