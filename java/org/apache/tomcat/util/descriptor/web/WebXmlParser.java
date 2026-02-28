@@ -59,11 +59,25 @@ public class WebXmlParser {
         webRuleSet = new WebRuleSet(false);
         webDigester = DigesterFactory.newDigester(validation,
                 namespaceAware, webRuleSet, blockExternal);
+        try {
+            webDigester.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            webDigester.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            webDigester.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        } catch (Exception e) {
+            // Ignore
+        }
         webDigester.getParser();
 
         webFragmentRuleSet = new WebRuleSet(true);
         webFragmentDigester = DigesterFactory.newDigester(validation,
                 namespaceAware, webFragmentRuleSet, blockExternal);
+        try {
+            webFragmentDigester.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            webFragmentDigester.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            webFragmentDigester.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        } catch (Exception e) {
+            // Ignore
+        }
         webFragmentDigester.getParser();
     }
 
@@ -105,6 +119,14 @@ public class WebXmlParser {
         } else {
             digester = webDigester;
             ruleSet = webRuleSet;
+        }
+
+        try {
+            digester.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            digester.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            digester.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        } catch (Exception e) {
+            // Ignore
         }
 
         digester.push(dest);
