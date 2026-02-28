@@ -291,6 +291,11 @@ public class WebdavServlet extends DefaultServlet {
             documentBuilderFactory = DocumentBuilderFactory.newInstance();
             documentBuilderFactory.setNamespaceAware(true);
             documentBuilderFactory.setExpandEntityReferences(false);
+            documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            documentBuilderFactory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            documentBuilderFactory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            documentBuilderFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            documentBuilderFactory.setXIncludeAware(false);
             documentBuilder = documentBuilderFactory.newDocumentBuilder();
             documentBuilder.setEntityResolver(new WebdavResolver(this.getServletContext()));
         } catch(ParserConfigurationException e) {
