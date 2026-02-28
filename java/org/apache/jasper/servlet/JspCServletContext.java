@@ -370,6 +370,41 @@ public class JspCServletContext implements ServletContext {
 
 
     /**
+     * Validate that the given path is a safe, context-relative resource path.
+     * This prevents path traversal and other potentially dangerous path values.
+     *
+     * @param path the path to validate
+     * @return true if the path is safe, false otherwise
+     */
+    private static boolean isValidResourcePath(String path) {
+        if (path == null) {
+            return false;
+        }
+        if (!path.startsWith("/")) {
+            return false;
+        }
+        // Normalize and check for path traversal
+        String normalized = path;
+        // Reject paths containing path traversal sequences
+        if (normalized.contains("../") || normalized.contains("..\\")) {
+            return false;
+        }
+        // Reject paths containing null bytes
+        if (normalized.indexOf('\0') >= 0) {
+            return false;
+        }
+        // Reject paths that attempt to break out via encoded characters
+        // (double encoding, etc.)
+        if (normalized.contains("%2e") || normalized.contains("%2E") ||
+                normalized.contains("%2f") || normalized.contains("%2F") ||
+                normalized.contains("%5c") || normalized.contains("%5C")) {
+            return false;
+        }
+        return true;
+    }
+
+
+    /**
      * Return a URL object of a resource that is mapped to the
      * specified context-relative path.
      *
@@ -385,15 +420,35 @@ public class JspCServletContext implements ServletContext {
             throw new MalformedURLException(Localizer.getMessage("jsp.error.URLMustStartWithSlash", path));
         }
 
+        // Validate path to prevent SSRF / path traversal
+        if (!isValidResourcePath(path)) {
+            throw new MalformedURLException("Invalid resource path: " + path);
+        }
+
         // Strip leading '/'
-        path = path.substring(1);
+        String relativePath = path.substring(1);
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
+            // Construct URL safely using the base URL and validated relative path
+            URI baseUri = myResourceBaseURL.toURI();
+            URI resolvedUri = baseUri.resolve(new URI(null, null, relativePath, null));
+
+            // Ensure resolved URI is under the base URI (prevent escaping document root)
+            String baseStr = baseUri.normalize().toString();
+            if (!baseStr.endsWith("/")) {
+                baseStr = baseStr + "/";
+            }
+            String resolvedStr = resolvedUri.normalize().toString();
+            if (!resolvedStr.startsWith(baseStr)) {
+                return null;
+            }
+
+            url = resolvedUri.toURL();
             try (InputStream is = url.openStream()) {
             }
+        } catch (URISyntaxException e) {
+            url = null;
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             url = null;
@@ -402,7 +457,7 @@ public class JspCServletContext implements ServletContext {
         // During initialisation, getResource() is called before resourceJARs is
         // initialised
         if (url == null && resourceJARs != null) {
-            String jarPath = "META-INF/resources/" + path;
+            String jarPath = "META-INF/resources/" + relativePath;
             for (URL jarUrl : resourceJARs) {
                 try (Jar jar = JarFactory.newInstance(jarUrl)) {
                     if (jar.exists(jarPath)) {
@@ -426,7 +481,11 @@ public class JspCServletContext implements ServletContext {
     @Override
     public InputStream getResourceAsStream(String path) {
         try {
-            return getResource(path).openStream();
+            URL resourceUrl = getResource(path);
+            if (resourceUrl == null) {
+                return null;
+            }
+            return resourceUrl.openStream();
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             return null;
