@@ -821,13 +821,21 @@ public class HostConfig implements LifecycleListener {
                                 // Need to check for a directory that should not be
                                 // there
                                 File dir = new File(appBase, cn.getBaseName());
-                                if (isInsideBase(dir, appBase) && dir.exists()) {
-                                    if (!app.loggedDirWarning) {
-                                        log.warn(sm.getString("hostConfig.deployWar.hiddenDir",
-                                                dir.getAbsoluteFile(), war.getAbsoluteFile()));
-                                        app.loggedDirWarning = true;
+                                try {
+                                    String canonicalDirPath = dir.getCanonicalPath();
+                                    String canonicalAppBasePath = appBase.getCanonicalPath();
+                                    if (!canonicalDirPath.startsWith(canonicalAppBasePath + File.separator)) {
+                                        app.loggedDirWarning = false;
+                                    } else if (dir.exists()) {
+                                        if (!app.loggedDirWarning) {
+                                            log.warn(sm.getString("hostConfig.deployWar.hiddenDir",
+                                                    dir.getAbsoluteFile(), war.getAbsoluteFile()));
+                                            app.loggedDirWarning = true;
+                                        }
+                                    } else {
+                                        app.loggedDirWarning = false;
                                     }
-                                } else {
+                                } catch (IOException e) {
                                     app.loggedDirWarning = false;
                                 }
                             }
@@ -1637,7 +1645,21 @@ public class HostConfig implements LifecycleListener {
         }
 
         File appBaseFile = host.getAppBaseFile();
-        if (!isInsideBase(appBaseFile, host.getCatalinaBase()) || !appBaseFile.isDirectory()) {
+        try {
+            String canonicalAppBase = appBaseFile.getCanonicalPath();
+            String canonicalCatalinaBase = host.getCatalinaBase().getCanonicalPath();
+            if (!canonicalAppBase.startsWith(canonicalCatalinaBase + File.separator)) {
+                log.error(sm.getString("hostConfig.appBase", host.getName(),
+                        appBaseFile.getPath()));
+                host.setDeployOnStartup(false);
+                host.setAutoDeploy(false);
+            } else if (!appBaseFile.isDirectory()) {
+                log.error(sm.getString("hostConfig.appBase", host.getName(),
+                        appBaseFile.getPath()));
+                host.setDeployOnStartup(false);
+                host.setAutoDeploy(false);
+            }
+        } catch (IOException e) {
             log.error(sm.getString("hostConfig.appBase", host.getName(),
                     appBaseFile.getPath()));
             host.setDeployOnStartup(false);
