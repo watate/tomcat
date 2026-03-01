@@ -390,7 +390,22 @@ public class JspCServletContext implements ServletContext {
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
+            URI baseUri = myResourceBaseURL.toURI();
+            URI uri = baseUri.resolve(path);
+
+            // Ensure the resolved URI uses the same scheme as the base
+            if (baseUri.getScheme() == null || uri.getScheme() == null ||
+                    !baseUri.getScheme().equalsIgnoreCase(uri.getScheme())) {
+                throw new MalformedURLException("Invalid resource scheme");
+            }
+
+            // Ensure the resolved URI remains within the base location
+            String base = baseUri.toString();
+            String target = uri.toString();
+            if (!target.startsWith(base)) {
+                throw new MalformedURLException("Resource outside allowed base");
+            }
+
             url = uri.toURL();
             try (InputStream is = url.openStream()) {
             }
