@@ -20,6 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -575,12 +577,35 @@ public class XByteBuffer implements Serializable {
             cls = new ClassLoader[0];
         }
         if (data != null && length > 0) {
-            InputStream  instream = new ByteArrayInputStream(data,offset,length);
-            ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
-            message = stream.readObject();
-            instream.close();
-            stream.close();
+            InputStream instream = new ByteArrayInputStream(data,offset,length);
+            ObjectInputStream stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            stream.setObjectInputFilter(info -> {
+                Class<?> serialClass = info.serialClass();
+                if (serialClass != null) {
+                    if (!Serializable.class.isAssignableFrom(serialClass)) {
+                        return ObjectInputFilter.Status.REJECTED;
+                    }
+                    if (serialClass.isInterface() || serialClass.isPrimitive() || serialClass.isArray() ||
+                            serialClass.getName().startsWith("java.lang.") ||
+                            serialClass.getName().startsWith("java.util.") ||
+                            serialClass.getName().startsWith("org.apache.catalina.tribes.")) {
+                        return ObjectInputFilter.Status.UNDECIDED;
+                    }
+                    return ObjectInputFilter.Status.REJECTED;
+                }
+                return ObjectInputFilter.Status.UNDECIDED;
+            });
+            try {
+                message = stream.readObject();
+            } catch (InvalidClassException ice) {
+                throw ice;
+            } finally {
+                try {
+                    stream.close();
+                } finally {
+                    instream.close();
+                }
+            }
         }
         if ( message == null ) {
             return null;
