@@ -17,6 +17,7 @@
 package org.apache.catalina.webresources;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Set;
 
@@ -160,6 +161,12 @@ public class FileResourceSet extends AbstractFileResourceSet {
 
     @Override
     protected void checkType(File file) {
+        try {
+            file = file.getCanonicalFile();
+        } catch (IOException e) {
+            throw new IllegalArgumentException(
+                    sm.getString("fileResourceSet.notFile", getBase(), File.separator, getInternalPath()), e);
+        }
         if (file.isFile() == false) {
             throw new IllegalArgumentException(
                     sm.getString("fileResourceSet.notFile", getBase(), File.separator, getInternalPath()));

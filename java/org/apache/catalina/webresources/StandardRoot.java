@@ -386,6 +386,13 @@ public class StandardRoot extends LifecycleMBeanBase implements WebResourceRoot 
         // This implementation assumes that the base for all resources will be a
         // file.
         File file = new File(base);
+        try {
+            file = file.getCanonicalFile();
+            base = file.getPath();
+        } catch (IOException e) {
+            throw new IllegalArgumentException(
+                    sm.getString("standardRoot.createInvalidFile", base), e);
+        }
 
         if (file.isFile()) {
             if (archivePath != null) {

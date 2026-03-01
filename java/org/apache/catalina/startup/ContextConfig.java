@@ -1913,14 +1913,23 @@ public class ContextConfig implements LifecycleListener {
                             entryName = jar.getEntryName();
                         }
                     }
-                } else if ("file".equals(url.getProtocol())) {
-                    File file = new File(url.toURI());
-                    File resources = new File(file, "META-INF/resources/");
-                    if (resources.isDirectory()) {
-                        context.getResources().createWebResourceSet(
-                                WebResourceRoot.ResourceSetType.RESOURCE_JAR,
-                                "/", resources.getAbsolutePath(), null, "/");
-                    }
+                    } else if ("file".equals(url.getProtocol())) {
+                        File file = new File(url.toURI());
+                        File resources = new File(file, "META-INF/resources/");
+                        try {
+                            File canonicalFile = file.getCanonicalFile();
+                            resources = resources.getCanonicalFile();
+                            if (!resources.toPath().startsWith(canonicalFile.toPath())) {
+                                continue;
+                            }
+                        } catch (IOException ioe) {
+                            continue;
+                        }
+                        if (resources.isDirectory()) {
+                            context.getResources().createWebResourceSet(
+                                    WebResourceRoot.ResourceSetType.RESOURCE_JAR,
+                                    "/", resources.getAbsolutePath(), null, "/");
+                        }
                 }
             } catch (IOException | URISyntaxException e) {
                 log.error(sm.getString("contextConfig.resourceJarFail", url,
@@ -2304,6 +2313,14 @@ public class ContextConfig implements LifecycleListener {
 
     protected void processAnnotationsFile(File file, WebXml fragment,
             boolean handlesTypesOnly, Map<String,JavaClassCacheEntry> javaClassCache) {
+
+        try {
+            file = file.getCanonicalFile();
+        } catch (IOException e) {
+            log.error(sm.getString("contextConfig.inputStreamFile",
+                    file.getAbsolutePath()), e);
+            return;
+        }
 
         if (file.isDirectory()) {
             // Returns null if directory is not readable
