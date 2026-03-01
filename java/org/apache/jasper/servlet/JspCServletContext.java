@@ -386,13 +386,27 @@ public class JspCServletContext implements ServletContext {
         }
 
         // Strip leading '/'
-        path = path.substring(1);
+        String resourcePath = path.substring(1);
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
+            URI baseUri = myResourceBaseURL.toURI();
+            URI resolved = baseUri.resolve(resourcePath).normalize();
+
+            String basePath = baseUri.normalize().getPath();
+            String resolvedPath = resolved.getPath();
+            if (basePath != null && resolvedPath != null && !resolvedPath.startsWith(basePath)) {
+                return null;
+            }
+
+            String scheme = resolved.getScheme();
+            if (scheme == null || !myResourceBaseURL.getProtocol().equalsIgnoreCase(scheme)) {
+                return null;
+            }
+
+            url = resolved.toURL();
             try (InputStream is = url.openStream()) {
+                // Validate resource existence / accessibility
             }
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
@@ -402,7 +416,7 @@ public class JspCServletContext implements ServletContext {
         // During initialisation, getResource() is called before resourceJARs is
         // initialised
         if (url == null && resourceJARs != null) {
-            String jarPath = "META-INF/resources/" + path;
+            String jarPath = "META-INF/resources/" + resourcePath;
             for (URL jarUrl : resourceJARs) {
                 try (Jar jar = JarFactory.newInstance(jarUrl)) {
                     if (jar.exists(jarPath)) {
