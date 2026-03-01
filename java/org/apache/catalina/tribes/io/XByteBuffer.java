@@ -20,6 +20,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -567,6 +568,38 @@ public class XByteBuffer implements Serializable {
 
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
+    /**
+     * ObjectInputFilter that restricts deserialization to known safe classes.
+     * This prevents arbitrary class instantiation from untrusted data.
+     */
+    private static final ObjectInputFilter DESERIALIZATION_FILTER = filterInfo -> {
+        Class<?> clazz = filterInfo.serialClass();
+        if (clazz == null) {
+            // Not a class check (e.g., array size or depth check)
+            return ObjectInputFilter.Status.UNDECIDED;
+        }
+        // Unwrap array types to check the base component type
+        while (clazz.isArray()) {
+            clazz = clazz.getComponentType();
+        }
+        // Allow primitive types
+        if (clazz.isPrimitive()) {
+            return ObjectInputFilter.Status.ALLOWED;
+        }
+        String className = clazz.getName();
+        // Allow Java standard library types
+        if (className.startsWith("java.") || className.startsWith("javax.")) {
+            return ObjectInputFilter.Status.ALLOWED;
+        }
+        // Allow Tomcat types used in cluster communication
+        if (className.startsWith("org.apache.catalina.") || className.startsWith("org.apache.tomcat.")) {
+            return ObjectInputFilter.Status.ALLOWED;
+        }
+        // Reject all other classes to prevent unsafe deserialization
+        log.warn(sm.getString("xByteBuffer.deserialization.rejected", className));
+        return ObjectInputFilter.Status.REJECTED;
+    };
+
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
         throws IOException, ClassNotFoundException, ClassCastException {
         invokecount.addAndGet(1);
@@ -578,6 +611,7 @@ public class XByteBuffer implements Serializable {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
             stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            stream.setObjectInputFilter(DESERIALIZATION_FILTER);
             message = stream.readObject();
             instream.close();
             stream.close();
