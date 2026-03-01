@@ -699,6 +699,17 @@ public class DefaultServlet extends HttpServlet {
         // Convert all '/' characters to '.' in resourcePath
         String convertedResourcePath = path.replace('/', '.');
         File contentFile = new File(tempDir, convertedResourcePath);
+
+        // Validate that the resolved file is within the temp directory
+        // to prevent path traversal attacks
+        String canonicalTempDir = tempDir.getCanonicalPath();
+        String canonicalContentFile = contentFile.getCanonicalPath();
+        if (!canonicalContentFile.startsWith(canonicalTempDir + File.separator) &&
+                !canonicalContentFile.equals(canonicalTempDir)) {
+            throw new IOException(
+                    "Invalid path: resolved file is outside the designated temporary directory");
+        }
+
         if (contentFile.createNewFile()) {
             // Clean up contentFile when Tomcat is terminated
             contentFile.deleteOnExit();
@@ -1414,7 +1425,20 @@ public class DefaultServlet extends HttpServlet {
         while (location.length() > 1 && location.charAt(1) == '/') {
             location.deleteCharAt(0);
         }
-        response.sendRedirect(response.encodeRedirectURL(location.toString()));
+
+        // Validate redirect URL is a safe, same-origin relative path
+        // to prevent open redirect attacks.
+        // The while loop above already ensures no protocol-relative redirects (//).
+        // Additionally verify no scheme in the path portion to prevent absolute URL redirects.
+        String redirectUrl = location.toString();
+        int queryStart = redirectUrl.indexOf('?');
+        String pathPortion = queryStart >= 0 ? redirectUrl.substring(0, queryStart) : redirectUrl;
+        if (!pathPortion.startsWith("/") || pathPortion.contains("://")) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
+
+        response.sendRedirect(response.encodeRedirectURL(redirectUrl));
     }
 
     /**
