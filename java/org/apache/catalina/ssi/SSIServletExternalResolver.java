@@ -18,6 +18,7 @@ package org.apache.catalina.ssi;
 
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLConnection;
@@ -467,6 +468,29 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
     }
 
 
+    /**
+     * Validates that the given URL is safe to connect to (i.e., it only
+     * references local resources via the servlet context and not arbitrary
+     * external URLs).
+     */
+    private void validateResourceURL(URL url) throws IOException {
+        if (url == null) {
+            return;
+        }
+        String protocol = url.getProtocol();
+        // Only allow file-based and jndi protocols that are typically returned
+        // by ServletContext.getResource(). Reject http/https/ftp etc. to
+        // prevent SSRF.
+        if (protocol != null && (protocol.equalsIgnoreCase("http")
+                || protocol.equalsIgnoreCase("https")
+                || protocol.equalsIgnoreCase("ftp")
+                || protocol.equalsIgnoreCase("gopher"))) {
+            throw new IOException(sm.getString(
+                    "ssiServletExternalResolver.noResource", url.toString()));
+        }
+    }
+
+
     protected URLConnection getURLConnection(String originalPath,
             boolean virtual) throws IOException {
         ServletContextAndPath csAndP = getServletContextAndPath(originalPath,
@@ -477,6 +501,8 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
         if (url == null) {
             throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
         }
+        // Validate the URL to prevent SSRF
+        validateResourceURL(url);
         URLConnection urlConnection = url.openConnection();
         return urlConnection;
     }
