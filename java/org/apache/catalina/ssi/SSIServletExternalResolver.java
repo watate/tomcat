@@ -477,6 +477,12 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
         if (url == null) {
             throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
         }
+        // Validate that the resolved URL uses a safe, local-only protocol
+        // to prevent server-side request forgery (SSRF)
+        String scheme = url.getProtocol();
+        if (!"file".equals(scheme) && !"jar".equals(scheme)) {
+            throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
+        }
         URLConnection urlConnection = url.openConnection();
         return urlConnection;
     }
