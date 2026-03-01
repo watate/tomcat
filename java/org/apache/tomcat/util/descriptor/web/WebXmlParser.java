@@ -26,6 +26,7 @@ import org.apache.tomcat.util.descriptor.InputSourceUtil;
 import org.apache.tomcat.util.descriptor.XmlErrorHandler;
 import org.apache.tomcat.util.digester.Digester;
 import org.apache.tomcat.util.res.StringManager;
+import org.xml.sax.EntityResolver;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXParseException;
 
@@ -53,6 +54,8 @@ public class WebXmlParser {
     private final Digester webFragmentDigester;
     private final WebRuleSet webFragmentRuleSet;
 
+    private static final EntityResolver BLOCK_EXTERNAL_ENTITY_RESOLVER =
+            (publicId, systemId) -> new InputSource();
 
     public WebXmlParser(boolean namespaceAware, boolean validation,
             boolean blockExternal) {
@@ -109,6 +112,7 @@ public class WebXmlParser {
 
         digester.push(dest);
         digester.setErrorHandler(handler);
+        digester.setEntityResolver(BLOCK_EXTERNAL_ENTITY_RESOLVER);
 
         if(log.isDebugEnabled()) {
             log.debug(sm.getString("webXmlParser.applicationStart",
