@@ -20,8 +20,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -567,6 +569,27 @@ public class XByteBuffer implements Serializable {
 
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
+    /**
+     * Package prefixes allowed for deserialization. This restricts
+     * deserialization to known safe classes and prevents exploitation
+     * of unsafe deserialization via gadget chains.
+     */
+    private static final String[] ALLOWED_PACKAGE_PREFIXES = {
+        "java.",
+        "javax.",
+        "org.apache.catalina.",
+        "["
+    };
+
+    static boolean isClassNameAllowed(String className) {
+        for (String prefix : ALLOWED_PACKAGE_PREFIXES) {
+            if (className.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
         throws IOException, ClassNotFoundException, ClassCastException {
         invokecount.addAndGet(1);
@@ -577,7 +600,22 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            if (cls.length > 0) {
+                stream = new ReplicationStream(instream, cls);
+            } else {
+                stream = new ObjectInputStream(instream) {
+                    @Override
+                    protected Class<?> resolveClass(ObjectStreamClass classDesc)
+                            throws IOException, ClassNotFoundException {
+                        String name = classDesc.getName();
+                        if (!XByteBuffer.isClassNameAllowed(name)) {
+                            throw new InvalidClassException(
+                                    sm.getString("xByteBuffer.classNotAllowed", name));
+                        }
+                        return super.resolveClass(classDesc);
+                    }
+                };
+            }
             message = stream.readObject();
             instream.close();
             stream.close();
