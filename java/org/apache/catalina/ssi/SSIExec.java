@@ -21,6 +21,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.apache.catalina.util.IOTools;
 import org.apache.tomcat.util.res.StringManager;
@@ -38,6 +41,25 @@ public class SSIExec implements SSICommand {
     protected final SSIInclude ssiInclude = new SSIInclude();
     protected static final int BUFFER_SIZE = 1024;
 
+    /**
+     * Whitelist of commands that may be executed via the SSI #exec cmd directive.
+     * This prevents arbitrary user-controlled input from being passed to Runtime.exec().
+     */
+    private static final Set<String> ALLOWED_COMMANDS;
+
+    static {
+        Set<String> cmds = new HashSet<>();
+        // TODO: Populate with the exact commands that are considered safe in this deployment.
+        // Example placeholder; adjust or extend as appropriate:
+        // cmds.add("/bin/true");
+        ALLOWED_COMMANDS = Collections.unmodifiableSet(cmds);
+    }
+
+
+    private boolean isAllowedCommand(String command) {
+        return command != null && ALLOWED_COMMANDS.contains(command);
+    }
+
 
     /**
      * @see SSICommand
@@ -54,6 +76,12 @@ public class SSIExec implements SSICommand {
             lastModified = ssiInclude.process(ssiMediator, "include",
                     new String[]{"virtual"}, new String[]{substitutedValue},
                     writer);
+            if (!isAllowedCommand(substitutedValue)) {
+                // Do not execute commands that are not explicitly whitelisted
+                ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue), null);
+                writer.write(configErrMsg);
+                return lastModified;
+            }
         } else if (paramName.equalsIgnoreCase("cmd")) {
             boolean foundProgram = false;
             try {
