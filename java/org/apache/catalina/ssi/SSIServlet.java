@@ -174,6 +174,11 @@ public class SSIServlet extends HttpServlet {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
+        String protocol = resource.getProtocol();
+        if (protocol == null || (!"file".equalsIgnoreCase(protocol) && !"jar".equalsIgnoreCase(protocol))) {
+            res.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return;
+        }
         String resourceMimeType = servletContext.getMimeType(path);
         if (resourceMimeType == null) {
             resourceMimeType = "text/html";
