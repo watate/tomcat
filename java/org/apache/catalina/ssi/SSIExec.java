@@ -21,6 +21,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.util.StringTokenizer;
 
 import org.apache.catalina.util.IOTools;
 import org.apache.tomcat.util.res.StringManager;
@@ -57,8 +58,14 @@ public class SSIExec implements SSICommand {
         } else if (paramName.equalsIgnoreCase("cmd")) {
             boolean foundProgram = false;
             try {
+                String[] cmdArray = toCommandArray(substitutedValue);
+                if (cmdArray.length == 0) {
+                    writer.write(configErrMsg);
+                    return lastModified;
+                }
+
                 Runtime rt = Runtime.getRuntime();
-                Process proc = rt.exec(substitutedValue);
+                Process proc = rt.exec(cmdArray);
                 foundProgram = true;
                 BufferedReader stdOutReader = new BufferedReader(
                         new InputStreamReader(proc.getInputStream()));
@@ -72,6 +79,7 @@ public class SSIExec implements SSICommand {
             } catch (InterruptedException e) {
                 ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue), e);
                 writer.write(configErrMsg);
+                Thread.currentThread().interrupt();
             } catch (IOException e) {
                 if (!foundProgram) {
                     // Apache doesn't output an error message if it can't find
@@ -81,5 +89,15 @@ public class SSIExec implements SSICommand {
             }
         }
         return lastModified;
+    }
+
+    private String[] toCommandArray(String command) {
+        StringTokenizer tokenizer = new StringTokenizer(command);
+        String[] result = new String[tokenizer.countTokens()];
+        int i = 0;
+        while (tokenizer.hasMoreTokens()) {
+            result[i++] = tokenizer.nextToken();
+        }
+        return result;
     }
 }
