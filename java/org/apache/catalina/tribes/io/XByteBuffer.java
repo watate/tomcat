@@ -20,10 +20,15 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.catalina.tribes.util.StringManager;
@@ -554,6 +559,67 @@ public class XByteBuffer implements Serializable {
         return result;
     }
 
+    /**
+     * Set of class name prefixes that are allowed for deserialization.
+     * This allowlist restricts which classes can be deserialized to prevent
+     * unsafe deserialization attacks.
+     */
+    private static final Set<String> ALLOWED_CLASS_PREFIXES;
+    static {
+        Set<String> prefixes = new HashSet<>();
+        prefixes.add("org.apache.catalina.tribes.");
+        prefixes.add("java.lang.");
+        prefixes.add("java.util.");
+        prefixes.add("java.io.");
+        prefixes.add("[B"); // byte arrays
+        prefixes.add("[C"); // char arrays
+        prefixes.add("[I"); // int arrays
+        prefixes.add("[J"); // long arrays
+        prefixes.add("[S"); // short arrays
+        prefixes.add("[Z"); // boolean arrays
+        prefixes.add("[D"); // double arrays
+        prefixes.add("[F"); // float arrays
+        // Add additional allowed prefixes as needed for your application
+        String additionalAllowed = System.getProperty("org.apache.catalina.tribes.io.XByteBuffer.ALLOWED_CLASSES");
+        if (additionalAllowed != null) {
+            for (String prefix : additionalAllowed.split(",")) {
+                prefix = prefix.trim();
+                if (!prefix.isEmpty()) {
+                    prefixes.add(prefix);
+                }
+            }
+        }
+        ALLOWED_CLASS_PREFIXES = Collections.unmodifiableSet(prefixes);
+    }
+
+    /**
+     * An ObjectInputStream that filters classes during deserialization
+     * to only allow known safe classes.
+     */
+    private static class FilteredObjectInputStream extends ObjectInputStream {
+        public FilteredObjectInputStream(InputStream in) throws IOException {
+            super(in);
+        }
+
+        @Override
+        protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
+            String className = desc.getName();
+            if (!isClassAllowed(className)) {
+                throw new InvalidClassException(
+                    "Deserialization of class " + className + " is not allowed");
+            }
+            return super.resolveClass(desc);
+        }
+
+        private boolean isClassAllowed(String className) {
+            for (String prefix : ALLOWED_CLASS_PREFIXES) {
+                if (className.startsWith(prefix)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
 
     public static Serializable deserialize(byte[] data)
         throws IOException, ClassNotFoundException, ClassCastException {
@@ -577,7 +643,7 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            stream = (cls.length>0)? new ReplicationStream(instream,cls):new FilteredObjectInputStream(instream);
             message = stream.readObject();
             instream.close();
             stream.close();
