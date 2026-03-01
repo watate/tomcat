@@ -805,6 +805,26 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
             }
         } else {
             File uploadPath = new File(versioned, tag);
+            // Validate that tag does not escape the versioned directory
+            try {
+                String canonicalVersioned =
+                    versioned.getCanonicalPath();
+                String canonicalUploadPath =
+                    uploadPath.getCanonicalPath();
+                if (!canonicalUploadPath.startsWith(
+                        canonicalVersioned + File.separator) &&
+                        !canonicalUploadPath.equals(
+                                canonicalVersioned)) {
+                    writer.println(smClient.getString(
+                            "managerServlet.invalidPath", tag));
+                    return;
+                }
+            } catch (IOException ioe) {
+                writer.println(smClient.getString(
+                        "managerServlet.exception",
+                        ioe.toString()));
+                return;
+            }
             if (!uploadPath.mkdirs() && !uploadPath.isDirectory()) {
                 writer.println(smClient.getString("managerServlet.mkdirFail",
                         uploadPath));
@@ -830,8 +850,12 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
                             throw new Exception(sm.getString("managerServlet.copyError", config));
                         }
                     }
-                    // Upload WAR
-                    uploadWar(writer, request, uploadedWar, smClient);
+                    // Upload WAR - pass the expected parent directory for
+                    // path validation inside uploadWar
+                    File warParentDir = (tag != null) ? versioned
+                            : host.getAppBaseFile();
+                    uploadWar(writer, request, uploadedWar,
+                            warParentDir, smClient);
                     if (update && tag == null) {
                         if (deployedWar.exists() && !deployedWar.delete()) {
                             writer.println(smClient.getString("managerServlet.deleteFail",
@@ -1694,7 +1718,19 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
      * @exception IOException if an I/O error occurs during processing
      */
     protected void uploadWar(PrintWriter writer, HttpServletRequest request,
-            File war, StringManager smClient) throws IOException {
+            File war, File expectedParent,
+            StringManager smClient) throws IOException {
+
+        // Validate that the war file path is within the expected directory
+        // to prevent path traversal attacks
+        String canonicalParent = expectedParent.getCanonicalPath();
+        String canonicalWar = war.getCanonicalPath();
+        if (!canonicalWar.startsWith(canonicalParent + File.separator) &&
+                !canonicalWar.equals(canonicalParent)) {
+            throw new IOException(
+                    smClient.getString("managerServlet.invalidPath",
+                            war.getName()));
+        }
 
         if (war.exists() && !war.delete()) {
             String msg = smClient.getString("managerServlet.deleteFail", war);

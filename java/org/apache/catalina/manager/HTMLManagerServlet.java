@@ -264,6 +264,19 @@ public final class HTMLManagerServlet extends ManagerServlet {
                 // Identify the appBase of the owning Host of this Context
                 // (if any)
                 File file = new File(host.getAppBaseFile(), filename);
+                // Validate that the resolved path is within the appBase
+                // to prevent path traversal via crafted filenames
+                String canonicalAppBase =
+                    host.getAppBaseFile().getCanonicalPath();
+                String canonicalFile = file.getCanonicalPath();
+                if (!canonicalFile.startsWith(
+                        canonicalAppBase + File.separator) &&
+                        !canonicalFile.equals(canonicalAppBase)) {
+                    message = smClient.getString(
+                            "htmlManagerServlet.deployUploadNotWar",
+                            filename);
+                    break;
+                }
                 if (file.exists()) {
                     message = smClient.getString(
                             "htmlManagerServlet.deployUploadWarExists",
