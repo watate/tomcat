@@ -28,6 +28,7 @@ import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -374,6 +375,21 @@ public class DiskFileItem
      */
     @Override
     public void write(final File file) throws Exception {
+        // Validate the destination path to prevent path traversal attacks.
+        // Normalize the path, then verify it resides within the allowed base directory.
+        final Path normalizedDest = file.toPath().toAbsolutePath().normalize();
+        final Path basePath;
+        if (repository != null) {
+            basePath = repository.toPath().toAbsolutePath().normalize();
+        } else {
+            basePath = new File(System.getProperty("java.io.tmpdir"))
+                    .toPath().toAbsolutePath().normalize();
+        }
+        if (!normalizedDest.startsWith(basePath)) {
+            throw new IOException(
+                    "Invalid destination path: target is outside the allowed directory");
+        }
+
         if (isInMemory()) {
             try (OutputStream fout = Files.newOutputStream(file.toPath())) {
                 fout.write(get());
