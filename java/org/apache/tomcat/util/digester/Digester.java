@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
@@ -34,6 +35,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import javax.xml.XMLConstants;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
@@ -567,7 +569,14 @@ public class Digester extends DefaultHandler2 {
                 factory.setFeature("http://xml.org/sax/features/validation", true);
                 // Enable schema validation
                 factory.setFeature("http://apache.org/xml/features/validation/schema", true);
+            } else {
+                factory.setFeature("http://xml.org/sax/features/validation", false);
             }
+
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
         }
         return factory;
     }
@@ -878,6 +887,10 @@ public class Digester extends DefaultHandler2 {
     public XMLReader getXMLReader() throws SAXException {
         if (reader == null) {
             reader = getParser().getXMLReader();
+            reader.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            reader.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            reader.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            reader.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
         }
 
         reader.setDTDHandler(this);
@@ -1381,58 +1394,7 @@ public class Digester extends DefaultHandler2 {
     @Override
     public InputSource resolveEntity(String name, String publicId, String baseURI, String systemId)
             throws SAXException, IOException {
-
-        if (saxLog.isDebugEnabled()) {
-            saxLog.debug(
-                    "resolveEntity('" + publicId + "', '" + systemId + "', '" + baseURI + "')");
-        }
-
-        // Has this system identifier been registered?
-        String entityURL = null;
-        if (publicId != null) {
-            entityURL = entityValidator.get(publicId);
-        }
-
-        if (entityURL == null) {
-            if (systemId == null) {
-                // cannot resolve
-                if (log.isDebugEnabled()) {
-                    log.debug(" Cannot resolve entity: '" + publicId + "'");
-                }
-                return null;
-
-            } else {
-                // try to resolve using system ID
-                if (log.isDebugEnabled()) {
-                    log.debug(" Trying to resolve using system ID '" + systemId + "'");
-                }
-                entityURL = systemId;
-                // resolve systemId against baseURI if it is not absolute
-                if (baseURI != null) {
-                    try {
-                        URI uri = new URI(systemId);
-                        if (!uri.isAbsolute()) {
-                            entityURL = new URI(baseURI).resolve(uri).toString();
-                        }
-                    } catch (URISyntaxException e) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Invalid URI '" + baseURI + "' or '" + systemId + "'");
-                        }
-                    }
-                }
-            }
-        }
-
-        // Return an input source to our alternative URL
-        if (log.isDebugEnabled()) {
-            log.debug(" Resolving to alternate DTD '" + entityURL + "'");
-        }
-
-        try {
-            return new InputSource(entityURL);
-        } catch (Exception e) {
-            throw createSAXException(e);
-        }
+        return new InputSource(new StringReader(""));
     }
 
 
