@@ -28,6 +28,7 @@ import org.apache.tomcat.util.digester.Digester;
 import org.apache.tomcat.util.res.StringManager;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXParseException;
+import org.xml.sax.XMLReader;
 
 public class WebXmlParser {
 
@@ -116,7 +117,19 @@ public class WebXmlParser {
         }
 
         try {
-            digester.parse(source);
+            // Protect against XXE attacks by disabling external
+            // entity resolution on the underlying XMLReader
+            XMLReader reader = digester.getXMLReader();
+            reader.setFeature(
+                    "http://xml.org/sax/features/external-general-entities",
+                    false);
+            reader.setFeature(
+                    "http://xml.org/sax/features/external-parameter-entities",
+                    false);
+            reader.setFeature(
+                    "http://apache.org/xml/features/nonvalidating/load-external-dtd",
+                    false);
+            reader.parse(source);
 
             if (handler.getWarnings().size() > 0 ||
                     handler.getErrors().size() > 0) {
