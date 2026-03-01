@@ -23,8 +23,6 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpServletResponseWrapper;
 
-import org.apache.tomcat.util.security.Escape;
-
 
 /**
  * Wrapper around a <code>javax.servlet.http.HttpServletResponse</code> that transforms an application response object
@@ -281,8 +279,10 @@ class ApplicationHttpResponse extends HttpServletResponseWrapper {
     public void sendError(int sc, String msg) throws IOException {
 
         if (!included) {
-            ((HttpServletResponse) getResponse()).sendError(sc,
-                    Escape.htmlElementContent(msg));
+            // Do not forward the raw message to avoid exposing potentially
+            // sensitive error details (stack traces, internal paths) to
+            // external users. The status code alone is sufficient.
+            ((HttpServletResponse) getResponse()).sendError(sc);
         }
 
     }
