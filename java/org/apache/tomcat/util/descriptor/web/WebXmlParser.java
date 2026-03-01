@@ -19,6 +19,8 @@ package org.apache.tomcat.util.descriptor.web;
 import java.io.IOException;
 import java.net.URL;
 
+import javax.xml.XMLConstants;
+
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.descriptor.DigesterFactory;
@@ -28,6 +30,8 @@ import org.apache.tomcat.util.digester.Digester;
 import org.apache.tomcat.util.res.StringManager;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXParseException;
+import org.xml.sax.SAXNotRecognizedException;
+import org.xml.sax.SAXNotSupportedException;
 
 public class WebXmlParser {
 
@@ -59,12 +63,43 @@ public class WebXmlParser {
         webRuleSet = new WebRuleSet(false);
         webDigester = DigesterFactory.newDigester(validation,
                 namespaceAware, webRuleSet, blockExternal);
+        configureXxeProtection(webDigester);
         webDigester.getParser();
 
         webFragmentRuleSet = new WebRuleSet(true);
         webFragmentDigester = DigesterFactory.newDigester(validation,
                 namespaceAware, webFragmentRuleSet, blockExternal);
+        configureXxeProtection(webFragmentDigester);
         webFragmentDigester.getParser();
+    }
+
+    /**
+     * Configure XXE protection on the given digester to prevent
+     * XML external entity expansion attacks.
+     *
+     * @param digester the Digester instance to configure
+     */
+    private void configureXxeProtection(Digester digester) {
+        try {
+            digester.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        } catch (Exception e) {
+            log.warn("Could not set disallow-doctype-decl feature", e);
+        }
+        try {
+            digester.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        } catch (Exception e) {
+            log.warn("Could not set external-general-entities feature", e);
+        }
+        try {
+            digester.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        } catch (Exception e) {
+            log.warn("Could not set external-parameter-entities feature", e);
+        }
+        try {
+            digester.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        } catch (Exception e) {
+            log.warn("Could not set load-external-dtd feature", e);
+        }
     }
 
     /**
