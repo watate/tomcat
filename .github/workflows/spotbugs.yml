@@ -20,10 +20,14 @@ jobs:
       - name: Run SpotBugs
         run: ant -Dexecute.spotbugs=true -Dspotbugs.report.format=xml spotbugs
 
+      - name: Set artifact name
+        if: always()
+        run: echo "ARTIFACT_NAME=spotbugs-report-${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
+
       - name: Upload SpotBugs report
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: spotbugs-report-${{ github.ref_name }}
+          name: ${{ env.ARTIFACT_NAME }}
           path: output/spotbugs/
           retention-days: 30
