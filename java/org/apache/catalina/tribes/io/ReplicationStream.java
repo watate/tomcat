@@ -71,6 +71,10 @@ public final class ReplicationStream extends ObjectInputStream {
     public Class<?> resolveClass(ObjectStreamClass classDesc)
         throws ClassNotFoundException, IOException {
         String name = classDesc.getName();
+        if (!XByteBuffer.isDeserializationAllowed(name)) {
+            throw new ClassNotFoundException(
+                    sm.getString("replicationStream.classNotAllowed", name));
+        }
         try {
             return resolveClass(name);
         } catch (ClassNotFoundException e) {
@@ -79,7 +83,10 @@ public final class ReplicationStream extends ObjectInputStream {
     }
 
     public Class<?> resolveClass(String name) throws ClassNotFoundException {
-
+        if (!XByteBuffer.isDeserializationAllowed(name)) {
+            throw new ClassNotFoundException(
+                    sm.getString("replicationStream.classNotAllowed", name));
+        }
         boolean tryRepFirst = name.startsWith("org.apache.catalina.tribes");
             try {
             if (tryRepFirst) {

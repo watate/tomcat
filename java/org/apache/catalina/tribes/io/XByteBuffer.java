@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
+import java.io.ObjectStreamClass;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
@@ -567,6 +568,40 @@ public class XByteBuffer implements Serializable {
 
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
+    /**
+     * Checks whether a class name is allowed for deserialization.
+     * Only permits Java standard library types, Tomcat internal types,
+     * and primitive array descriptors. Rejects all other classes to
+     * prevent arbitrary class instantiation from untrusted data.
+     *
+     * @param className the fully qualified class name to check
+     * @return true if the class is allowed, false otherwise
+     */
+    static boolean isDeserializationAllowed(String className) {
+        // Allow primitive type descriptors used in serialization
+        if (className.length() <= 2) {
+            return true;
+        }
+        // Allow array types - strip all leading '[' and check the base type
+        String baseClassName = className;
+        while (baseClassName.startsWith("[")) {
+            baseClassName = baseClassName.substring(1);
+        }
+        // Array of objects uses 'L' prefix and ';' suffix (e.g. "[Ljava.lang.String;")
+        if (baseClassName.startsWith("L") && baseClassName.endsWith(";")) {
+            baseClassName = baseClassName.substring(1, baseClassName.length() - 1);
+        }
+        // Allow Java standard library types
+        if (baseClassName.startsWith("java.") || baseClassName.startsWith("javax.")) {
+            return true;
+        }
+        // Allow Tomcat types used in cluster communication
+        if (baseClassName.startsWith("org.apache.catalina.") || baseClassName.startsWith("org.apache.tomcat.")) {
+            return true;
+        }
+        return false;
+    }
+
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
         throws IOException, ClassNotFoundException, ClassCastException {
         invokecount.addAndGet(1);
@@ -577,7 +612,22 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            if (cls.length > 0) {
+                stream = new ReplicationStream(instream, cls);
+            } else {
+                stream = new ObjectInputStream(instream) {
+                    @Override
+                    protected Class<?> resolveClass(ObjectStreamClass desc)
+                            throws IOException, ClassNotFoundException {
+                        String name = desc.getName();
+                        if (!XByteBuffer.isDeserializationAllowed(name)) {
+                            throw new ClassNotFoundException(
+                                    sm.getString("xByteBuffer.deserialization.rejected", name));
+                        }
+                        return super.resolveClass(desc);
+                    }
+                };
+            }
             message = stream.readObject();
             instream.close();
             stream.close();
