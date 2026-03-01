@@ -25,7 +25,9 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URL;
 import java.net.URLConnection;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
@@ -187,8 +189,23 @@ public class SSIServlet extends HttpServlet {
     }
 
 
+    private static final Set<String> ALLOWED_RESOURCE_PROTOCOLS;
+    static {
+        Set<String> protocols = new HashSet<>();
+        protocols.add("file");
+        protocols.add("jndi");
+        protocols.add("jar");
+        ALLOWED_RESOURCE_PROTOCOLS = protocols;
+    }
+
+
     protected void processSSI(HttpServletRequest req, HttpServletResponse res,
             URL resource) throws IOException {
+        String protocol = resource.getProtocol();
+        if (!ALLOWED_RESOURCE_PROTOCOLS.contains(protocol)) {
+            res.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return;
+        }
         SSIExternalResolver ssiExternalResolver =
             new SSIServletExternalResolver(getServletContext(), req, res,
                     isVirtualWebappRelative, debug, inputEncoding);
