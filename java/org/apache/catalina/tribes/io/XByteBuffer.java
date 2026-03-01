@@ -577,7 +577,7 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            stream = (cls.length>0)? new ReplicationStream(instream,cls):new org.apache.catalina.tribes.io.ObjectInputStreamWithClassFilter(instream);
             message = stream.readObject();
             instream.close();
             stream.close();
@@ -612,6 +612,67 @@ public class XByteBuffer implements Serializable {
 
     public boolean getDiscard() {
         return discard;
+    }
+
+    /**
+     * An ObjectInputStream that filters classes during deserialization
+     * to prevent unsafe deserialization of arbitrary classes.
+     */
+    private static class ObjectInputStreamWithClassFilter extends ObjectInputStream {
+
+        private static final java.util.Set<String> ALLOWED_PACKAGE_PREFIXES = new java.util.HashSet<>(
+            java.util.Arrays.asList(
+                "java.lang.",
+                "java.util.",
+                "java.io.",
+                "java.math.",
+                "java.time.",
+                "java.net.",
+                "[B", // byte array
+                "[C", // char array
+                "[I", // int array
+                "[J", // long array
+                "[S", // short array
+                "[D", // double array
+                "[F", // float array
+                "[Z", // boolean array
+                "org.apache.catalina.tribes.",
+                "org.apache.catalina.ha."
+            )
+        );
+
+        ObjectInputStreamWithClassFilter(InputStream in) throws IOException {
+            super(in);
+        }
+
+        @Override
+        protected Class<?> resolveClass(java.io.ObjectStreamClass desc)
+                throws IOException, ClassNotFoundException {
+            String className = desc.getName();
+            // Check if class is in allowed packages
+            boolean allowed = false;
+            for (String prefix : ALLOWED_PACKAGE_PREFIXES) {
+                if (className.startsWith(prefix)) {
+                    allowed = true;
+                    break;
+                }
+            }
+            // Also allow array types of allowed classes
+            if (!allowed && className.startsWith("[L")) {
+                String elementClass = className.substring(2, className.length() - 1);
+                for (String prefix : ALLOWED_PACKAGE_PREFIXES) {
+                    if (elementClass.startsWith(prefix)) {
+                        allowed = true;
+                        break;
+                    }
+                }
+            }
+            if (!allowed) {
+                throw new java.io.InvalidClassException(
+                    "Deserialization of class " + className + " is not allowed");
+            }
+            return super.resolveClass(desc);
+        }
     }
 
 }
