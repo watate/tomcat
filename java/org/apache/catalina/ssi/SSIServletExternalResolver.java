@@ -502,7 +502,7 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
         }
         // Only allow local resource protocols to prevent SSRF
         String protocol = url.getProtocol();
-        if (!"file".equals(protocol) && !"jndi".equals(protocol)) {
+        if (!("file".equals(protocol) || "jndi".equals(protocol) || "jar".equals(protocol) || "war".equals(protocol))) {
             throw new IOException(sm.getString(
                     "ssiServletExternalResolver.invalidProtocol", protocol));
         }
