@@ -1,3 +1,4 @@
+```java
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -21,6 +22,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.catalina.util.IOTools;
 import org.apache.tomcat.util.res.StringManager;
@@ -58,28 +63,7 @@ public class SSIExec implements SSICommand {
             boolean foundProgram = false;
             try {
                 Runtime rt = Runtime.getRuntime();
-                Process proc = rt.exec(substitutedValue);
-                foundProgram = true;
-                BufferedReader stdOutReader = new BufferedReader(
-                        new InputStreamReader(proc.getInputStream()));
-                BufferedReader stdErrReader = new BufferedReader(
-                        new InputStreamReader(proc.getErrorStream()));
-                char[] buf = new char[BUFFER_SIZE];
-                IOTools.flow(stdErrReader, writer, buf);
-                IOTools.flow(stdOutReader, writer, buf);
-                proc.waitFor();
-                lastModified = System.currentTimeMillis();
-            } catch (InterruptedException e) {
-                ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue), e);
-                writer.write(configErrMsg);
-            } catch (IOException e) {
-                if (!foundProgram) {
-                    // Apache doesn't output an error message if it can't find
-                    // a program
-                }
-                ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue), e);
-            }
-        }
-        return lastModified;
-    }
-}
+                List<String> cmdArgs = new ArrayList<>();
+                Matcher m = Pattern.compile("[^\\s\"]+|\"([^\"]*)\"").matcher(substitutedValue);
+                while (m.find()) {
+                    if (m.
