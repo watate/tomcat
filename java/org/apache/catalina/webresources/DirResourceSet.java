@@ -70,8 +70,14 @@ public class DirResourceSet extends AbstractFileResourceSet {
             File f = new File(base, internalPath);
             f = new File(f, "/WEB-INF/classes/META-INF/resources");
 
-            if (f.isDirectory()) {
-                root.createWebResourceSet(ResourceSetType.RESOURCE_JAR, "/", f.getAbsolutePath(), null, "/");
+            try {
+                File canonicalBase = new File(base).getCanonicalFile();
+                f = f.getCanonicalFile();
+                if (f.toPath().startsWith(canonicalBase.toPath()) && f.isDirectory()) {
+                    root.createWebResourceSet(ResourceSetType.RESOURCE_JAR, "/", f.getAbsolutePath(), null, "/");
+                }
+            } catch (IOException e) {
+                // Cannot determine canonical path, skip resource registration
             }
         }
 
@@ -274,6 +280,12 @@ public class DirResourceSet extends AbstractFileResourceSet {
 
     @Override
     protected void checkType(File file) {
+        try {
+            file = file.getCanonicalFile();
+        } catch (IOException e) {
+            throw new IllegalArgumentException(
+                    sm.getString("dirResourceSet.notDirectory", getBase(), File.separator, getInternalPath()), e);
+        }
         if (file.isDirectory() == false) {
             throw new IllegalArgumentException(
                     sm.getString("dirResourceSet.notDirectory", getBase(), File.separator, getInternalPath()));
