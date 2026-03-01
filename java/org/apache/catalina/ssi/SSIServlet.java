@@ -164,7 +164,7 @@ public class SSIServlet extends HttpServlet {
         }
         // Exclude any resource in the /WEB-INF and /META-INF subdirectories
         // (the "toUpperCase()" avoids problems on Windows systems)
-        if (path == null || path.toUpperCase(Locale.ENGLISH).startsWith("/WEB-INF")
+        if (path == null || !path.startsWith("/") || path.toUpperCase(Locale.ENGLISH).startsWith("/WEB-INF")
                 || path.toUpperCase(Locale.ENGLISH).startsWith("/META-INF")) {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
