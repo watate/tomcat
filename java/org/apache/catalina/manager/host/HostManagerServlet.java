@@ -381,6 +381,25 @@ public class HostManagerServlet
         } catch (IOException e) {
             appBaseFile = file;
         }
+
+        // Validate that the resolved appBase path does not escape the Catalina base directory
+        try {
+            String canonicalBase = engine.getCatalinaBase().getCanonicalPath();
+            String canonicalAppBasePath = appBaseFile.getCanonicalPath();
+            if (!canonicalAppBasePath.equals(canonicalBase) &&
+                    !canonicalAppBasePath.startsWith(canonicalBase + File.separator)) {
+                writer.println(smClient.getString(
+                        "hostManagerServlet.appBaseCreateFail",
+                        appBaseFile.toString(), name));
+                return;
+            }
+        } catch (IOException e) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.appBaseCreateFail",
+                    appBaseFile.toString(), name));
+            return;
+        }
+
         if (!appBaseFile.mkdirs() && !appBaseFile.isDirectory()) {
             writer.println(smClient.getString(
                     "hostManagerServlet.appBaseCreateFail",
@@ -692,6 +711,12 @@ public class HostManagerServlet
      * @return the config base for the host
      */
     protected File getConfigBase(String hostName) {
+        // Validate hostName to prevent path traversal
+        if (hostName == null || hostName.contains("..") ||
+                hostName.contains("/") || hostName.contains("\\")) {
+            return null;
+        }
+
         File configBase = new File(context.getCatalinaBase(), "conf");
         if (!configBase.exists()) {
             return null;
@@ -702,6 +727,19 @@ public class HostManagerServlet
         if (installedHost != null) {
             configBase = new File(configBase, hostName);
         }
+
+        // Validate the resolved path is within the Catalina base conf directory
+        try {
+            String canonicalConf = new File(context.getCatalinaBase(), "conf").getCanonicalPath();
+            String canonicalConfigBase = configBase.getCanonicalPath();
+            if (!canonicalConfigBase.equals(canonicalConf) &&
+                    !canonicalConfigBase.startsWith(canonicalConf + File.separator)) {
+                return null;
+            }
+        } catch (IOException e) {
+            return null;
+        }
+
         if (!configBase.mkdirs() && !configBase.isDirectory()) {
             return null;
         }
