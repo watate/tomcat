@@ -33,8 +33,6 @@ import java.io.Serializable;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.AccessController;
@@ -1428,16 +1426,14 @@ public class DefaultServlet extends HttpServlet {
             location.deleteCharAt(0);
         }
 
-        // Validate redirect URL is a relative path (no scheme or authority)
-        // to prevent open redirect attacks
+        // Validate redirect URL is a safe, same-origin relative path
+        // to prevent open redirect attacks.
+        // The while loop above already ensures no protocol-relative redirects (//).
+        // Additionally verify no scheme in the path portion to prevent absolute URL redirects.
         String redirectUrl = location.toString();
-        try {
-            URI redirectUri = new URI(redirectUrl);
-            if (redirectUri.isAbsolute() || redirectUri.getAuthority() != null) {
-                response.sendError(HttpServletResponse.SC_BAD_REQUEST);
-                return;
-            }
-        } catch (URISyntaxException e) {
+        int queryStart = redirectUrl.indexOf('?');
+        String pathPortion = queryStart >= 0 ? redirectUrl.substring(0, queryStart) : redirectUrl;
+        if (!pathPortion.startsWith("/") || pathPortion.contains("://")) {
             response.sendError(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }
