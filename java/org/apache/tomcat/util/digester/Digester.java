@@ -34,6 +34,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import javax.xml.XMLConstants;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
@@ -568,6 +569,12 @@ public class Digester extends DefaultHandler2 {
                 // Enable schema validation
                 factory.setFeature("http://apache.org/xml/features/validation/schema", true);
             }
+
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            factory.setXIncludeAware(false);
         }
         return factory;
     }
@@ -879,6 +886,11 @@ public class Digester extends DefaultHandler2 {
         if (reader == null) {
             reader = getParser().getXMLReader();
         }
+
+        reader.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        reader.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        reader.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        reader.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
 
         reader.setDTDHandler(this);
         reader.setContentHandler(this);
@@ -1381,58 +1393,7 @@ public class Digester extends DefaultHandler2 {
     @Override
     public InputSource resolveEntity(String name, String publicId, String baseURI, String systemId)
             throws SAXException, IOException {
-
-        if (saxLog.isDebugEnabled()) {
-            saxLog.debug(
-                    "resolveEntity('" + publicId + "', '" + systemId + "', '" + baseURI + "')");
-        }
-
-        // Has this system identifier been registered?
-        String entityURL = null;
-        if (publicId != null) {
-            entityURL = entityValidator.get(publicId);
-        }
-
-        if (entityURL == null) {
-            if (systemId == null) {
-                // cannot resolve
-                if (log.isDebugEnabled()) {
-                    log.debug(" Cannot resolve entity: '" + publicId + "'");
-                }
-                return null;
-
-            } else {
-                // try to resolve using system ID
-                if (log.isDebugEnabled()) {
-                    log.debug(" Trying to resolve using system ID '" + systemId + "'");
-                }
-                entityURL = systemId;
-                // resolve systemId against baseURI if it is not absolute
-                if (baseURI != null) {
-                    try {
-                        URI uri = new URI(systemId);
-                        if (!uri.isAbsolute()) {
-                            entityURL = new URI(baseURI).resolve(uri).toString();
-                        }
-                    } catch (URISyntaxException e) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Invalid URI '" + baseURI + "' or '" + systemId + "'");
-                        }
-                    }
-                }
-            }
-        }
-
-        // Return an input source to our alternative URL
-        if (log.isDebugEnabled()) {
-            log.debug(" Resolving to alternate DTD '" + entityURL + "'");
-        }
-
-        try {
-            return new InputSource(entityURL);
-        } catch (Exception e) {
-            throw createSAXException(e);
-        }
+        return new InputSource(new java.io.StringReader(""));
     }
 
 
@@ -1440,7 +1401,7 @@ public class Digester extends DefaultHandler2 {
 
     @Override
     public void startDTD(String name, String publicId, String systemId) throws SAXException {
-        setPublicId(publicId);
+        throw new SAXException("DOCTYPE is disallowed");
     }
 
 
