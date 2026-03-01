@@ -180,6 +180,22 @@ public class DigesterFactory {
         digester.setNamespaceAware(xmlNamespaceAware);
         digester.setValidating(xmlValidation);
         digester.setUseContextClassLoader(true);
+
+        // Guard against XXE attacks by disabling external entity resolution
+        // at the SAX parser level. This prevents XML External Entity (XXE)
+        // injection when parsing user-controlled XML data.
+        try {
+            digester.setFeature(
+                    "http://xml.org/sax/features/external-general-entities",
+                    false);
+            digester.setFeature(
+                    "http://xml.org/sax/features/external-parameter-entities",
+                    false);
+        } catch (Exception e) {
+            Log log = LogFactory.getLog(DigesterFactory.class);
+            log.warn(sm.getString("digesterFactory.xmlFeatureError"), e);
+        }
+
         EntityResolver2 resolver = new LocalResolver(SERVLET_API_PUBLIC_IDS,
                 SERVLET_API_SYSTEM_IDS, blockExternal);
         digester.setEntityResolver(resolver);
