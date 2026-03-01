@@ -385,14 +385,43 @@ public class JspCServletContext implements ServletContext {
             throw new MalformedURLException(Localizer.getMessage("jsp.error.URLMustStartWithSlash", path));
         }
 
-        // Strip leading '/'
-        path = path.substring(1);
+        // Reject path traversal and suspicious input early
+        if (path.indexOf('\0') >= 0 || path.contains("/../") || path.endsWith("/..") || path.startsWith("/../")
+                || path.contains("/./")) {
+            return null;
+        }
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
+            URI baseUri = myResourceBaseURL.toURI();
+            URI resolved = baseUri.resolve(path.substring(1)).normalize();
+
+            // Ensure the resolved URL stays under the configured base and does not
+            // introduce a different scheme/host (SSRF protection).
+            String baseScheme = baseUri.getScheme();
+            String resolvedScheme = resolved.getScheme();
+            if (baseScheme == null || resolvedScheme == null || !baseScheme.equalsIgnoreCase(resolvedScheme)) {
+                return null;
+            }
+
+            if (baseUri.getHost() != null || resolved.getHost() != null) {
+                String baseHost = baseUri.getHost();
+                String resolvedHost = resolved.getHost();
+                if (baseHost == null || resolvedHost == null || !baseHost.equalsIgnoreCase(resolvedHost)
+                        || baseUri.getPort() != resolved.getPort()) {
+                    return null;
+                }
+            }
+
+            String basePath = baseUri.normalize().getPath();
+            String resolvedPath = resolved.getPath();
+            if (basePath != null && resolvedPath != null && !resolvedPath.startsWith(basePath)) {
+                return null;
+            }
+
+            url = resolved.toURL();
             try (InputStream is = url.openStream()) {
+                // Validate accessibility
             }
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
@@ -402,7 +431,7 @@ public class JspCServletContext implements ServletContext {
         // During initialisation, getResource() is called before resourceJARs is
         // initialised
         if (url == null && resourceJARs != null) {
-            String jarPath = "META-INF/resources/" + path;
+            String jarPath = "META-INF/resources/" + path.substring(1);
             for (URL jarUrl : resourceJARs) {
                 try (Jar jar = JarFactory.newInstance(jarUrl)) {
                     if (jar.exists(jarPath)) {
@@ -426,7 +455,11 @@ public class JspCServletContext implements ServletContext {
     @Override
     public InputStream getResourceAsStream(String path) {
         try {
-            return getResource(path).openStream();
+            URL resource = getResource(path);
+            if (resource == null) {
+                return null;
+            }
+            return resource.openStream();
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             return null;
