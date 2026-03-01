@@ -20,9 +20,13 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.io.Serializable;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -567,6 +571,37 @@ public class XByteBuffer implements Serializable {
 
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
+    /**
+     * Check if a class name is allowed for deserialization. This restricts
+     * deserialization to safe classes used in Tribes cluster communication,
+     * preventing exploitation via gadget chain attacks.
+     *
+     * @param className the fully qualified class name to check
+     * @return true if the class is allowed, false otherwise
+     */
+    private static boolean isAllowedDeserializationClass(String className) {
+        // Allow array type descriptors (e.g. "[B" for byte[], "[Ljava.lang.String;")
+        if (className.startsWith("[")) {
+            return true;
+        }
+        // Allow standard Java types commonly used in serialization
+        if (className.startsWith("java.lang.") ||
+                className.startsWith("java.util.") ||
+                className.startsWith("java.io.") ||
+                className.startsWith("java.math.") ||
+                className.startsWith("java.time.") ||
+                className.startsWith("java.net.") ||
+                className.startsWith("java.sql.")) {
+            return true;
+        }
+        // Allow Apache Catalina and Tomcat classes used in cluster communication
+        if (className.startsWith("org.apache.catalina.") ||
+                className.startsWith("org.apache.tomcat.")) {
+            return true;
+        }
+        return false;
+    }
+
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
         throws IOException, ClassNotFoundException, ClassCastException {
         invokecount.addAndGet(1);
@@ -577,7 +612,7 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            stream = new FilteredObjectInputStream(instream, cls);
             message = stream.readObject();
             instream.close();
             stream.close();
@@ -612,6 +647,122 @@ public class XByteBuffer implements Serializable {
 
     public boolean getDiscard() {
         return discard;
+    }
+
+    /**
+     * A filtered ObjectInputStream that validates class names during
+     * deserialization against an allowlist of safe classes. This prevents
+     * deserialization of arbitrary classes that could be exploited in
+     * gadget chain attacks. It also supports loading classes from custom
+     * class loaders for cluster replication, combining the functionality
+     * of {@link ReplicationStream} with deserialization filtering.
+     */
+    private static class FilteredObjectInputStream extends ObjectInputStream {
+
+        private ClassLoader[] classLoaders;
+
+        FilteredObjectInputStream(InputStream in, ClassLoader[] classLoaders)
+                throws IOException {
+            super(in);
+            this.classLoaders = classLoaders != null ? classLoaders : new ClassLoader[0];
+        }
+
+        @Override
+        protected Class<?> resolveClass(ObjectStreamClass classDesc)
+                throws IOException, ClassNotFoundException {
+            String name = classDesc.getName();
+            if (!isAllowedDeserializationClass(name)) {
+                throw new InvalidClassException(
+                        sm.getString("xByteBuffer.forbidden.class", name));
+            }
+            if (classLoaders.length > 0) {
+                // Replicate ReplicationStream class loading logic
+                boolean tryRepFirst = name.startsWith("org.apache.catalina.tribes");
+                try {
+                    if (tryRepFirst) {
+                        return Class.forName(name, false, getClass().getClassLoader());
+                    } else {
+                        return findExternalClass(name);
+                    }
+                } catch (Exception x) {
+                    if (tryRepFirst) {
+                        return findExternalClass(name);
+                    } else {
+                        return Class.forName(name, false, getClass().getClassLoader());
+                    }
+                }
+            }
+            return super.resolveClass(classDesc);
+        }
+
+        @Override
+        protected Class<?> resolveProxyClass(String[] interfaces)
+                throws IOException, ClassNotFoundException {
+            if (classLoaders.length == 0) {
+                return super.resolveProxyClass(interfaces);
+            }
+            // Replicate ReplicationStream proxy class resolution logic
+            ClassLoader latestLoader;
+            if (classLoaders.length > 0) {
+                latestLoader = classLoaders[0];
+            } else {
+                latestLoader = null;
+            }
+            ClassLoader nonPublicLoader = null;
+            boolean hasNonPublicInterface = false;
+
+            Class<?>[] classObjs = new Class[interfaces.length];
+            for (int i = 0; i < interfaces.length; i++) {
+                String name = interfaces[i];
+                if (!isAllowedDeserializationClass(name)) {
+                    throw new InvalidClassException(
+                            sm.getString("xByteBuffer.forbidden.class", name));
+                }
+                Class<?> cl = resolveClass(ObjectStreamClass.lookup(
+                        Class.forName(name, false,
+                                latestLoader != null ? latestLoader : getClass().getClassLoader())));
+                if (latestLoader == null) {
+                    latestLoader = cl.getClassLoader();
+                }
+                if ((cl.getModifiers() & Modifier.PUBLIC) == 0) {
+                    if (hasNonPublicInterface) {
+                        if (nonPublicLoader != cl.getClassLoader()) {
+                            throw new IllegalAccessError(
+                                    sm.getString("replicationStream.conflict"));
+                        }
+                    } else {
+                        nonPublicLoader = cl.getClassLoader();
+                        hasNonPublicInterface = true;
+                    }
+                }
+                classObjs[i] = cl;
+            }
+            try {
+                Class<?> proxyClass = Proxy.getProxyClass(
+                        hasNonPublicInterface ? nonPublicLoader : latestLoader,
+                        classObjs);
+                return proxyClass;
+            } catch (IllegalArgumentException e) {
+                throw new ClassNotFoundException(null, e);
+            }
+        }
+
+        private Class<?> findExternalClass(String name) throws ClassNotFoundException {
+            ClassNotFoundException cnfe = null;
+            for (ClassLoader classLoader : classLoaders) {
+                try {
+                    Class<?> clazz = Class.forName(name, false, classLoader);
+                    return clazz;
+                } catch (ClassNotFoundException x) {
+                    cnfe = x;
+                }
+            }
+            if (cnfe != null) {
+                throw cnfe;
+            } else {
+                throw new ClassNotFoundException(name);
+            }
+        }
     }
 
 }
