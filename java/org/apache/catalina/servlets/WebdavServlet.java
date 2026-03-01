@@ -902,6 +902,13 @@ public class WebdavServlet extends DefaultServlet {
         Node lockInfoNode = null;
 
         DocumentBuilder documentBuilder = getDocumentBuilder();
+        documentBuilder.setEntityResolver(new EntityResolver() {
+            @Override
+            public InputSource resolveEntity(String publicId, String systemId) {
+                // Disallow resolution of external entities
+                return new InputSource(new StringReader(""));
+            }
+        });
 
         try {
             Document document = documentBuilder.parse(new InputSource(req.getInputStream()));
