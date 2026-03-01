@@ -24,6 +24,7 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -390,8 +391,24 @@ public class JspCServletContext implements ServletContext {
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
+            URI baseUri = myResourceBaseURL.toURI();
+            URI resolved = baseUri.resolve(path).normalize();
+
+            if ("file".equalsIgnoreCase(baseUri.getScheme()) && "file".equalsIgnoreCase(resolved.getScheme())) {
+                File baseFile = Paths.get(baseUri).toFile().getCanonicalFile();
+                File resolvedFile = Paths.get(resolved).toFile().getCanonicalFile();
+                if (!resolvedFile.toPath().startsWith(baseFile.toPath())) {
+                    return null;
+                }
+            } else {
+                String base = baseUri.toString();
+                String candidate = resolved.toString();
+                if (!candidate.startsWith(base)) {
+                    return null;
+                }
+            }
+
+            url = resolved.toURL();
             try (InputStream is = url.openStream()) {
             }
         } catch (Throwable t) {
