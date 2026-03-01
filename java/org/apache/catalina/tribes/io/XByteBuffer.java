@@ -20,11 +20,14 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 import org.apache.catalina.tribes.util.StringManager;
 import org.apache.juli.logging.Log;
@@ -567,6 +570,48 @@ public class XByteBuffer implements Serializable {
 
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
+    /**
+     * System property name to configure the deserialization filter pattern.
+     * The value should be a regular expression that matches the fully qualified
+     * class names of classes that are permitted during deserialization.
+     */
+    private static final String DESERIALIZATION_FILTER_PROPERTY =
+        "org.apache.catalina.tribes.io.XByteBuffer.deserializationFilter";
+
+    /**
+     * Default pattern that allows standard Java types, primitive arrays,
+     * and Apache Catalina/Tomcat classes to be deserialized.
+     */
+    private static final String DEFAULT_DESERIALIZATION_FILTER =
+        "java\\.lang\\..*|java\\.util\\..*|java\\.io\\..*|java\\.math\\..*|" +
+        "java\\.time\\..*|java\\.net\\..*|java\\.text\\..*|" +
+        "javax\\..*|" +
+        "\\[+[BCDFIJSZ]|\\[+L.*|" +
+        "org\\.apache\\.catalina\\..*|org\\.apache\\.tomcat\\..*";
+
+    private static final Pattern DESERIALIZATION_FILTER;
+
+    static {
+        String filter = System.getProperty(
+            DESERIALIZATION_FILTER_PROPERTY, DEFAULT_DESERIALIZATION_FILTER);
+        DESERIALIZATION_FILTER = Pattern.compile(filter);
+    }
+
+    /**
+     * Check if the given class name is allowed to be deserialized.
+     *
+     * @param className the fully qualified class name to check
+     * @throws InvalidClassException if the class is not allowed
+     */
+    static void checkDeserializationAllowed(String className)
+            throws InvalidClassException {
+        if (!DESERIALIZATION_FILTER.matcher(className).matches()) {
+            throw new InvalidClassException(sm.getString(
+                "xByteBuffer.classNotAllowed", className,
+                DESERIALIZATION_FILTER_PROPERTY));
+        }
+    }
+
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
         throws IOException, ClassNotFoundException, ClassCastException {
         invokecount.addAndGet(1);
@@ -577,7 +622,18 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            if (cls.length > 0) {
+                stream = new ReplicationStream(instream, cls);
+            } else {
+                stream = new ObjectInputStream(instream) {
+                    @Override
+                    protected Class<?> resolveClass(ObjectStreamClass desc)
+                            throws IOException, ClassNotFoundException {
+                        checkDeserializationAllowed(desc.getName());
+                        return super.resolveClass(desc);
+                    }
+                };
+            }
             message = stream.readObject();
             instream.close();
             stream.close();
