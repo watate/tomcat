@@ -1,0 +1,33 @@
+name: SpotBugs Analysis
+
+on:
+  push:
+    branches: ["**"]
+
+jobs:
+  spotbugs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Run SpotBugs
+        run: ant -Dexecute.spotbugs=true -Dspotbugs.report.format=xml spotbugs
+
+      - name: Set artifact name
+        if: always()
+        run: echo "ARTIFACT_NAME=spotbugs-report-${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
+
+      - name: Upload SpotBugs report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: output/spotbugs/
+          retention-days: 30
