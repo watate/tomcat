@@ -37,8 +37,11 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.catalina.mbeans.MBeanDumper;
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.modeler.Registry;
 import org.apache.tomcat.util.res.StringManager;
+import org.apache.tomcat.util.security.Escape;
 
 /**
  * This servlet will dump JMX attributes in a simple format and implement proxy
@@ -49,6 +52,8 @@ import org.apache.tomcat.util.res.StringManager;
 public class JMXProxyServlet extends HttpServlet {
 
     private static final long serialVersionUID = 1L;
+
+    private static final Log log = LogFactory.getLog(JMXProxyServlet.class);
 
     // Constant for "no parameters" when invoking a JMX operation
     // without any parameters.
@@ -147,13 +152,13 @@ public class JMXProxyServlet extends HttpServlet {
             }
 
             writer.print("OK - Attribute get '");
-            writer.print(onameStr);
+            writer.print(Escape.htmlElementContent(onameStr));
             writer.print("' - ");
-            writer.print(att);
+            writer.print(Escape.htmlElementContent(att));
 
             if (null != key) {
                 writer.print(" - key '");
-                writer.print(key);
+                writer.print(Escape.htmlElementContent(key));
                 writer.print("'");
             }
 
@@ -162,7 +167,7 @@ public class JMXProxyServlet extends HttpServlet {
             writer.println(MBeanDumper.escape(valueStr));
         } catch (Exception ex) {
             writer.println("Error - " + ex.toString());
-            ex.printStackTrace(writer);
+            log.error(sm.getString("jmxProxyServlet.getAttribute", onameStr, att), ex);
         }
     }
 
@@ -173,7 +178,7 @@ public class JMXProxyServlet extends HttpServlet {
             writer.println("OK - Attribute set");
         } catch (Exception ex) {
             writer.println("Error - " + ex.toString());
-            ex.printStackTrace(writer);
+            log.error(sm.getString("jmxProxyServlet.setAttribute", onameStr, att), ex);
         }
     }
 
@@ -187,7 +192,7 @@ public class JMXProxyServlet extends HttpServlet {
             writer.println();
         } catch (Exception ex) {
             writer.println("Error - " + ex.toString());
-            ex.printStackTrace(writer);
+            log.error(sm.getString("jmxProxyServlet.listBeans", qry), ex);
             return;
         }
 
@@ -212,14 +217,14 @@ public class JMXProxyServlet extends HttpServlet {
         try {
             Object retVal = invokeOperationInternal(onameStr, op, valuesStr);
             if (retVal != null) {
-                writer.println("OK - Operation " + op + " returned:");
+                writer.println("OK - Operation " + Escape.htmlElementContent(op) + " returned:");
                 output("", writer, retVal);
             } else {
-                writer.println("OK - Operation " + op + " without return value");
+                writer.println("OK - Operation " + Escape.htmlElementContent(op) + " without return value");
             }
         } catch (Exception ex) {
             writer.println("Error - " + ex.toString());
-            ex.printStackTrace(writer);
+            log.error(sm.getString("jmxProxyServlet.invokeOperation", onameStr, op), ex);
         }
     }
 
