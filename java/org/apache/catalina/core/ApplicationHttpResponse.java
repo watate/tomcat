@@ -23,6 +23,8 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpServletResponseWrapper;
 
+import org.apache.tomcat.util.security.Escape;
+
 
 /**
  * Wrapper around a <code>javax.servlet.http.HttpServletResponse</code> that transforms an application response object
@@ -62,6 +64,26 @@ class ApplicationHttpResponse extends HttpServletResponseWrapper {
      * Is this wrapped response the subject of an <code>include()</code> call?
      */
     protected boolean included = false;
+
+
+    // --------------------------------------------------- Private Methods
+
+
+    /**
+     * Sanitize a string value by stripping CR and LF characters to prevent
+     * HTTP response splitting attacks.
+     *
+     * @param value The value to sanitize
+     *
+     * @return The sanitized value with CR and LF characters removed, or
+     *         {@code null} if the input was {@code null}
+     */
+    private static String stripCrlf(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.replace("\r", "").replace("\n", "");
+    }
 
 
     // ------------------------------------------------ ServletResponse Methods
@@ -167,6 +189,14 @@ class ApplicationHttpResponse extends HttpServletResponseWrapper {
     public void addCookie(Cookie cookie) {
 
         if (!included) {
+            String name = cookie.getName();
+            String value = cookie.getValue();
+            if ((name != null && (name.indexOf('\r') >= 0 || name.indexOf('\n') >= 0)) ||
+                    (value != null && (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0))) {
+                // Reject cookies with CR/LF in name or value to prevent
+                // HTTP response splitting
+                return;
+            }
             ((HttpServletResponse) getResponse()).addCookie(cookie);
         }
 
@@ -199,7 +229,8 @@ class ApplicationHttpResponse extends HttpServletResponseWrapper {
     public void addHeader(String name, String value) {
 
         if (!included) {
-            ((HttpServletResponse) getResponse()).addHeader(name, value);
+            ((HttpServletResponse) getResponse()).addHeader(
+                    stripCrlf(name), stripCrlf(value));
         }
 
     }
@@ -250,7 +281,8 @@ class ApplicationHttpResponse extends HttpServletResponseWrapper {
     public void sendError(int sc, String msg) throws IOException {
 
         if (!included) {
-            ((HttpServletResponse) getResponse()).sendError(sc, msg);
+            ((HttpServletResponse) getResponse()).sendError(sc,
+                    Escape.htmlElementContent(msg));
         }
 
     }
@@ -267,7 +299,8 @@ class ApplicationHttpResponse extends HttpServletResponseWrapper {
     public void sendRedirect(String location) throws IOException {
 
         if (!included) {
-            ((HttpServletResponse) getResponse()).sendRedirect(location);
+            ((HttpServletResponse) getResponse()).sendRedirect(
+                    stripCrlf(location));
         }
 
     }
@@ -299,7 +332,8 @@ class ApplicationHttpResponse extends HttpServletResponseWrapper {
     public void setHeader(String name, String value) {
 
         if (!included) {
-            ((HttpServletResponse) getResponse()).setHeader(name, value);
+            ((HttpServletResponse) getResponse()).setHeader(
+                    stripCrlf(name), stripCrlf(value));
         }
 
     }
