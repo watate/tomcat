@@ -116,6 +116,10 @@ public class WebXmlParser {
         }
 
         try {
+            digester.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            digester.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            digester.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+
             digester.parse(source);
 
             if (handler.getWarnings().size() > 0 ||
