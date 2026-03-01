@@ -20,8 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
+import java.io.ObjectStreamClass;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
@@ -569,36 +569,38 @@ public class XByteBuffer implements Serializable {
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
     /**
-     * ObjectInputFilter that restricts deserialization to known safe classes.
-     * This prevents arbitrary class instantiation from untrusted data.
+     * Checks whether a class name is allowed for deserialization.
+     * Only permits Java standard library types, Tomcat internal types,
+     * and primitive array descriptors. Rejects all other classes to
+     * prevent arbitrary class instantiation from untrusted data.
+     *
+     * @param className the fully qualified class name to check
+     * @return true if the class is allowed, false otherwise
      */
-    private static final ObjectInputFilter DESERIALIZATION_FILTER = filterInfo -> {
-        Class<?> clazz = filterInfo.serialClass();
-        if (clazz == null) {
-            // Not a class check (e.g., array size or depth check)
-            return ObjectInputFilter.Status.UNDECIDED;
+    static boolean isDeserializationAllowed(String className) {
+        // Allow primitive type descriptors used in serialization
+        if (className.length() <= 2) {
+            return true;
         }
-        // Unwrap array types to check the base component type
-        while (clazz.isArray()) {
-            clazz = clazz.getComponentType();
+        // Allow array types - strip all leading '[' and check the base type
+        String baseClassName = className;
+        while (baseClassName.startsWith("[")) {
+            baseClassName = baseClassName.substring(1);
         }
-        // Allow primitive types
-        if (clazz.isPrimitive()) {
-            return ObjectInputFilter.Status.ALLOWED;
+        // Array of objects uses 'L' prefix and ';' suffix (e.g. "[Ljava.lang.String;")
+        if (baseClassName.startsWith("L") && baseClassName.endsWith(";")) {
+            baseClassName = baseClassName.substring(1, baseClassName.length() - 1);
         }
-        String className = clazz.getName();
         // Allow Java standard library types
-        if (className.startsWith("java.") || className.startsWith("javax.")) {
-            return ObjectInputFilter.Status.ALLOWED;
+        if (baseClassName.startsWith("java.") || baseClassName.startsWith("javax.")) {
+            return true;
         }
         // Allow Tomcat types used in cluster communication
-        if (className.startsWith("org.apache.catalina.") || className.startsWith("org.apache.tomcat.")) {
-            return ObjectInputFilter.Status.ALLOWED;
+        if (baseClassName.startsWith("org.apache.catalina.") || baseClassName.startsWith("org.apache.tomcat.")) {
+            return true;
         }
-        // Reject all other classes to prevent unsafe deserialization
-        log.warn(sm.getString("xByteBuffer.deserialization.rejected", className));
-        return ObjectInputFilter.Status.REJECTED;
-    };
+        return false;
+    }
 
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
         throws IOException, ClassNotFoundException, ClassCastException {
@@ -610,8 +612,22 @@ public class XByteBuffer implements Serializable {
         if (data != null && length > 0) {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
-            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
-            stream.setObjectInputFilter(DESERIALIZATION_FILTER);
+            if (cls.length > 0) {
+                stream = new ReplicationStream(instream, cls);
+            } else {
+                stream = new ObjectInputStream(instream) {
+                    @Override
+                    protected Class<?> resolveClass(ObjectStreamClass desc)
+                            throws IOException, ClassNotFoundException {
+                        String name = desc.getName();
+                        if (!XByteBuffer.isDeserializationAllowed(name)) {
+                            throw new ClassNotFoundException(
+                                    sm.getString("xByteBuffer.deserialization.rejected", name));
+                        }
+                        return super.resolveClass(desc);
+                    }
+                };
+            }
             message = stream.readObject();
             instream.close();
             stream.close();
