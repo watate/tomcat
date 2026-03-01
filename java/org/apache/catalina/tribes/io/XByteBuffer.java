@@ -20,6 +20,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -567,6 +568,46 @@ public class XByteBuffer implements Serializable {
 
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
+    /**
+     * Deserialization filter to guard against untrusted data. Rejects known
+     * dangerous gadget-chain classes and enforces reasonable resource limits.
+     */
+    private static final ObjectInputFilter DESERIALIZATION_FILTER = filterInfo -> {
+        Class<?> clazz = filterInfo.serialClass();
+        if (clazz != null) {
+            // Reject non-Serializable, non-primitive classes
+            if (!Serializable.class.isAssignableFrom(clazz)
+                    && !clazz.isPrimitive()
+                    && !Number.class.isAssignableFrom(clazz)) {
+                return ObjectInputFilter.Status.REJECTED;
+            }
+            String name = clazz.getName();
+            // Reject packages commonly exploited in deserialization attacks
+            if (name.startsWith("org.apache.commons.collections.functors.")
+                    || name.startsWith("org.apache.commons.collections4.functors.")
+                    || name.startsWith("org.codehaus.groovy.runtime.")
+                    || name.startsWith("org.springframework.beans.factory.")
+                    || name.startsWith("com.sun.rowset.")
+                    || name.startsWith("com.sun.org.apache.xalan.internal.xsltc.trax.")
+                    || name.startsWith("javassist.")
+                    || name.startsWith("org.mozilla.javascript.")
+                    || name.startsWith("com.mchange.v2.c3p0.")) {
+                return ObjectInputFilter.Status.REJECTED;
+            }
+        }
+        // Enforce resource limits
+        if (filterInfo.depth() > 100) {
+            return ObjectInputFilter.Status.REJECTED;
+        }
+        if (filterInfo.references() > 10000) {
+            return ObjectInputFilter.Status.REJECTED;
+        }
+        if (filterInfo.arrayLength() >= 0 && filterInfo.arrayLength() > 10000000) {
+            return ObjectInputFilter.Status.REJECTED;
+        }
+        return ObjectInputFilter.Status.ALLOWED;
+    };
+
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
         throws IOException, ClassNotFoundException, ClassCastException {
         invokecount.addAndGet(1);
@@ -578,6 +619,7 @@ public class XByteBuffer implements Serializable {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
             stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            stream.setObjectInputFilter(DESERIALIZATION_FILTER);
             message = stream.readObject();
             instream.close();
             stream.close();
