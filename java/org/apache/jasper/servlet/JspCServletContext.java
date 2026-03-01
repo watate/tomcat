@@ -390,8 +390,19 @@ public class JspCServletContext implements ServletContext {
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
-            url = uri.toURL();
+            URI resolved = myResourceBaseURL.toURI().resolve(path).normalize();
+            String base = myResourceBaseURL.toURI().normalize().toString();
+            String resolvedStr = resolved.toString();
+
+            if (!resolvedStr.startsWith(base)) {
+                return null;
+            }
+
+            url = resolved.toURL();
+            if ("http".equalsIgnoreCase(url.getProtocol()) || "https".equalsIgnoreCase(url.getProtocol())) {
+                return null;
+            }
+
             try (InputStream is = url.openStream()) {
             }
         } catch (Throwable t) {
@@ -426,7 +437,11 @@ public class JspCServletContext implements ServletContext {
     @Override
     public InputStream getResourceAsStream(String path) {
         try {
-            return getResource(path).openStream();
+            URL resource = getResource(path);
+            if (resource == null) {
+                return null;
+            }
+            return resource.openStream();
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             return null;
