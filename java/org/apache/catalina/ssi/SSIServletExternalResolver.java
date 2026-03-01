@@ -19,6 +19,9 @@ package org.apache.catalina.ssi;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.charset.Charset;
@@ -467,6 +470,22 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
     }
 
 
+    private boolean isLoopbackOrLocalAddress(URL url) {
+        try {
+            URI uri = url.toURI();
+            String host = uri.getHost();
+            if (host == null) {
+                return false;
+            }
+            InetAddress address = InetAddress.getByName(host);
+            return address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isSiteLocalAddress()
+                    || address.isLinkLocalAddress();
+        } catch (URISyntaxException | IOException e) {
+            return true;
+        }
+    }
+
+
     protected URLConnection getURLConnection(String originalPath,
             boolean virtual) throws IOException {
         ServletContextAndPath csAndP = getServletContextAndPath(originalPath,
@@ -477,6 +496,15 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
         if (url == null) {
             throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
         }
+
+        String protocol = url.getProtocol();
+        if (!"file".equalsIgnoreCase(protocol) && !"jar".equalsIgnoreCase(protocol)) {
+            throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
+        }
+        if (isLoopbackOrLocalAddress(url)) {
+            throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
+        }
+
         URLConnection urlConnection = url.openConnection();
         return urlConnection;
     }
