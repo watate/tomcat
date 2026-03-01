@@ -17,12 +17,8 @@
 package org.apache.catalina.ssi;
 
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.PrintWriter;
 
-import org.apache.catalina.util.IOTools;
 import org.apache.tomcat.util.res.StringManager;
 /**
  * Implements the Server-side #exec command
@@ -36,7 +32,6 @@ import org.apache.tomcat.util.res.StringManager;
 public class SSIExec implements SSICommand {
     private static final StringManager sm = StringManager.getManager(SSIExec.class);
     protected final SSIInclude ssiInclude = new SSIInclude();
-    protected static final int BUFFER_SIZE = 1024;
 
 
     /**
@@ -55,30 +50,9 @@ public class SSIExec implements SSICommand {
                     new String[]{"virtual"}, new String[]{substitutedValue},
                     writer);
         } else if (paramName.equalsIgnoreCase("cmd")) {
-            boolean foundProgram = false;
-            try {
-                Runtime rt = Runtime.getRuntime();
-                Process proc = rt.exec(substitutedValue);
-                foundProgram = true;
-                BufferedReader stdOutReader = new BufferedReader(
-                        new InputStreamReader(proc.getInputStream()));
-                BufferedReader stdErrReader = new BufferedReader(
-                        new InputStreamReader(proc.getErrorStream()));
-                char[] buf = new char[BUFFER_SIZE];
-                IOTools.flow(stdErrReader, writer, buf);
-                IOTools.flow(stdOutReader, writer, buf);
-                proc.waitFor();
-                lastModified = System.currentTimeMillis();
-            } catch (InterruptedException e) {
-                ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue), e);
-                writer.write(configErrMsg);
-            } catch (IOException e) {
-                if (!foundProgram) {
-                    // Apache doesn't output an error message if it can't find
-                    // a program
-                }
-                ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue), e);
-            }
+            // Disable command execution to prevent command injection.
+            ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue));
+            writer.write(configErrMsg);
         }
         return lastModified;
     }
