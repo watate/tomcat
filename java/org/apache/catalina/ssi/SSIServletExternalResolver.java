@@ -451,6 +451,28 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
     }
 
 
+    /**
+     * Validates that a resolved path is safe for resource access and request
+     * dispatching. Provides defense-in-depth checks after normalization.
+     */
+    private static void validateSsiPath(String path) throws IOException {
+        if (path == null || !path.startsWith("/")) {
+            throw new IOException(sm.getString(
+                    "ssiServletExternalResolver.invalidPath", path));
+        }
+        // Reject paths that still contain traversal sequences after normalization
+        if (path.contains("..")) {
+            throw new IOException(sm.getString(
+                    "ssiServletExternalResolver.invalidPath", path));
+        }
+        // Reject null bytes which could bypass security checks
+        if (path.indexOf('\0') >= 0) {
+            throw new IOException(sm.getString(
+                    "ssiServletExternalResolver.invalidPath", path));
+        }
+    }
+
+
     protected ServletContextAndPath getServletContextAndPath(
             String originalPath, boolean virtual) throws IOException {
         ServletContextAndPath csAndP = null;
@@ -473,9 +495,16 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
                 virtual);
         ServletContext context = csAndP.getServletContext();
         String path = csAndP.getPath();
+        validateSsiPath(path);
         URL url = context.getResource(path);
         if (url == null) {
             throw new IOException(sm.getString("ssiServletExternalResolver.noResource", path));
+        }
+        // Only allow local resource protocols to prevent SSRF
+        String protocol = url.getProtocol();
+        if (!"file".equals(protocol) && !"jndi".equals(protocol)) {
+            throw new IOException(sm.getString(
+                    "ssiServletExternalResolver.invalidProtocol", protocol));
         }
         URLConnection urlConnection = url.openConnection();
         return urlConnection;
@@ -520,6 +549,7 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
                     originalPath, virtual);
             ServletContext context = csAndP.getServletContext();
             String path = csAndP.getPath();
+            validateSsiPath(path);
             RequestDispatcher rd = context.getRequestDispatcher(path);
             if (rd == null) {
                 throw new IOException(sm.getString("ssiServletExternalResolver.requestDispatcherError", path));
