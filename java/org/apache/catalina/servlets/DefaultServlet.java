@@ -33,6 +33,8 @@ import java.io.Serializable;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.AccessController;
@@ -699,6 +701,17 @@ public class DefaultServlet extends HttpServlet {
         // Convert all '/' characters to '.' in resourcePath
         String convertedResourcePath = path.replace('/', '.');
         File contentFile = new File(tempDir, convertedResourcePath);
+
+        // Validate that the resolved file is within the temp directory
+        // to prevent path traversal attacks
+        String canonicalTempDir = tempDir.getCanonicalPath();
+        String canonicalContentFile = contentFile.getCanonicalPath();
+        if (!canonicalContentFile.startsWith(canonicalTempDir + File.separator) &&
+                !canonicalContentFile.equals(canonicalTempDir)) {
+            throw new IOException(
+                    "Invalid path: resolved file is outside the designated temporary directory");
+        }
+
         if (contentFile.createNewFile()) {
             // Clean up contentFile when Tomcat is terminated
             contentFile.deleteOnExit();
@@ -1414,7 +1427,22 @@ public class DefaultServlet extends HttpServlet {
         while (location.length() > 1 && location.charAt(1) == '/') {
             location.deleteCharAt(0);
         }
-        response.sendRedirect(response.encodeRedirectURL(location.toString()));
+
+        // Validate redirect URL is a relative path (no scheme or authority)
+        // to prevent open redirect attacks
+        String redirectUrl = location.toString();
+        try {
+            URI redirectUri = new URI(redirectUrl);
+            if (redirectUri.isAbsolute() || redirectUri.getAuthority() != null) {
+                response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+        } catch (URISyntaxException e) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
+
+        response.sendRedirect(response.encodeRedirectURL(redirectUrl));
     }
 
     /**
