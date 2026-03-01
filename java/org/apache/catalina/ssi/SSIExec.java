@@ -21,6 +21,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.util.regex.Pattern;
 
 import org.apache.catalina.util.IOTools;
 import org.apache.tomcat.util.res.StringManager;
@@ -37,6 +38,13 @@ public class SSIExec implements SSICommand {
     private static final StringManager sm = StringManager.getManager(SSIExec.class);
     protected final SSIInclude ssiInclude = new SSIInclude();
     protected static final int BUFFER_SIZE = 1024;
+    /**
+     * Pattern that matches only safe command characters. Rejects shell
+     * metacharacters that could be used for command injection such as
+     * ;, |, &amp;, $, `, (, ), {, }, &lt;, &gt;, newlines, etc.
+     */
+    private static final Pattern SAFE_COMMAND_PATTERN =
+            Pattern.compile("^[a-zA-Z0-9\\s_.\\-/=,@:~+\\[\\]]+$");
 
 
     /**
@@ -55,6 +63,12 @@ public class SSIExec implements SSICommand {
                     new String[]{"virtual"}, new String[]{substitutedValue},
                     writer);
         } else if (paramName.equalsIgnoreCase("cmd")) {
+            if (!SAFE_COMMAND_PATTERN.matcher(substitutedValue).matches()) {
+                ssiMediator.log(sm.getString(
+                        "ssiExec.invalidCommand", substitutedValue));
+                writer.write(configErrMsg);
+                return lastModified;
+            }
             boolean foundProgram = false;
             try {
                 Runtime rt = Runtime.getRuntime();
