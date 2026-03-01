@@ -119,6 +119,7 @@ public class ExpandWar {
 
         // Expand the WAR into the new document base directory
         Path canonicalDocBasePath = docBase.getCanonicalFile().toPath();
+        String canonicalDocBase = canonicalDocBasePath.toString();
 
         // Creating war tracker parent (normally META-INF)
         File warTrackerParent = warTracker.getParentFile();
@@ -133,18 +134,27 @@ public class ExpandWar {
                 JarEntry jarEntry = jarEntries.nextElement();
                 String name = jarEntry.getName();
                 File expandedFile = new File(docBase, name);
-                if (!expandedFile.getCanonicalFile().toPath().startsWith(canonicalDocBasePath)) {
+                String canonicalExpanded = expandedFile.getCanonicalPath();
+                if (!canonicalExpanded.startsWith(canonicalDocBase + File.separator) &&
+                        !canonicalExpanded.equals(canonicalDocBase)) {
                     // Trying to expand outside the docBase
                     // Throw an exception to stop the deployment
                     throw new IllegalArgumentException(
                             sm.getString("expandWar.illegalPath",war, name,
-                                    expandedFile.getCanonicalPath(),
-                                    canonicalDocBasePath));
+                                    canonicalExpanded,
+                                    canonicalDocBase));
                 }
                 int last = name.lastIndexOf('/');
                 if (last >= 0) {
                     File parent = new File(docBase,
                                            name.substring(0, last));
+                    String canonicalParent = parent.getCanonicalPath();
+                    if (!canonicalParent.startsWith(canonicalDocBase + File.separator) &&
+                            !canonicalParent.equals(canonicalDocBase)) {
+                        throw new IllegalArgumentException(
+                                sm.getString("expandWar.illegalPath", war, name,
+                                        canonicalParent, canonicalDocBase));
+                    }
                     if (!parent.mkdirs() && !parent.isDirectory()) {
                         throw new IOException(
                                 sm.getString("expandWar.createFailed", parent));
@@ -250,6 +260,15 @@ public class ExpandWar {
 
         boolean result = true;
 
+        // Canonicalize paths to prevent path injection
+        try {
+            src = src.getCanonicalFile();
+            dest = dest.getCanonicalFile();
+        } catch (IOException e) {
+            log.error(sm.getString("expandWar.copy", src, dest), e);
+            return false;
+        }
+
         String files[] = null;
         if (src.isDirectory()) {
             files = src.list();
@@ -264,6 +283,19 @@ public class ExpandWar {
         for (int i = 0; (i < files.length) && result; i++) {
             File fileSrc = new File(src, files[i]);
             File fileDest = new File(dest, files[i]);
+            // Validate child paths remain within source directory
+            try {
+                String canonicalChild = fileSrc.getCanonicalPath();
+                String srcPath = src.getPath();
+                if (!canonicalChild.startsWith(srcPath + File.separator) &&
+                        !canonicalChild.equals(srcPath)) {
+                    continue;
+                }
+            } catch (IOException e) {
+                log.error(sm.getString("expandWar.copy", fileSrc, fileDest), e);
+                result = false;
+                continue;
+            }
             if (fileSrc.isDirectory()) {
                 result = copy(fileSrc, fileDest);
             } else {
@@ -314,6 +346,16 @@ public class ExpandWar {
      */
     public static boolean delete(File dir, boolean logFailure) {
         boolean result;
+        // Canonicalize path to prevent path injection
+        try {
+            dir = dir.getCanonicalFile();
+        } catch (IOException e) {
+            if (logFailure) {
+                log.error(sm.getString(
+                        "expandWar.deleteFailed", dir.getAbsolutePath()), e);
+            }
+            return false;
+        }
         if (dir.isDirectory()) {
             result = deleteDir(dir, logFailure);
         } else {
@@ -354,12 +396,33 @@ public class ExpandWar {
      */
     public static boolean deleteDir(File dir, boolean logFailure) {
 
+        // Canonicalize path to prevent path injection
+        try {
+            dir = dir.getCanonicalFile();
+        } catch (IOException e) {
+            if (logFailure) {
+                log.error(sm.getString(
+                        "expandWar.deleteFailed", dir.getAbsolutePath()), e);
+            }
+            return false;
+        }
+
         String files[] = dir.list();
         if (files == null) {
             files = new String[0];
         }
         for (String s : files) {
             File file = new File(dir, s);
+            // Validate child path remains within directory
+            try {
+                String canonicalChild = file.getCanonicalPath();
+                String dirPath = dir.getPath();
+                if (!canonicalChild.startsWith(dirPath + File.separator)) {
+                    continue;
+                }
+            } catch (IOException e) {
+                continue;
+            }
             if (file.isDirectory()) {
                 deleteDir(file, logFailure);
             } else {
