@@ -21,6 +21,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.util.regex.Pattern;
 
 import org.apache.catalina.util.IOTools;
 import org.apache.tomcat.util.res.StringManager;
@@ -38,6 +39,33 @@ public class SSIExec implements SSICommand {
     protected final SSIInclude ssiInclude = new SSIInclude();
     protected static final int BUFFER_SIZE = 1024;
 
+    /**
+     * Pattern that matches only safe characters for command execution.
+     * Disallows shell metacharacters and other dangerous characters.
+     */
+    private static final Pattern SAFE_COMMAND_PATTERN =
+            Pattern.compile("^[a-zA-Z0-9_./@:\\-\\s]+$");
+
+    /**
+     * Validates that the command string does not contain shell injection characters.
+     *
+     * @param command the command string to validate
+     * @return true if the command is considered safe, false otherwise
+     */
+    private static boolean isValidCommand(String command) {
+        if (command == null || command.isEmpty()) {
+            return false;
+        }
+        // Reject commands containing shell metacharacters or dangerous patterns
+        if (!SAFE_COMMAND_PATTERN.matcher(command).matches()) {
+            return false;
+        }
+        // Reject path traversal attempts
+        if (command.contains("..")) {
+            return false;
+        }
+        return true;
+    }
 
     /**
      * @see SSICommand
@@ -55,10 +83,19 @@ public class SSIExec implements SSICommand {
                     new String[]{"virtual"}, new String[]{substitutedValue},
                     writer);
         } else if (paramName.equalsIgnoreCase("cmd")) {
+            if (!isValidCommand(substitutedValue)) {
+                ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue),
+                        new IOException("Command rejected due to invalid characters: " + substitutedValue));
+                writer.write(configErrMsg);
+                return lastModified;
+            }
             boolean foundProgram = false;
             try {
-                Runtime rt = Runtime.getRuntime();
-                Process proc = rt.exec(substitutedValue);
+                // Use ProcessBuilder with explicit tokenization to avoid shell interpretation
+                String[] cmdTokens = substitutedValue.split("\\s+");
+                ProcessBuilder pb = new ProcessBuilder(cmdTokens);
+                pb.redirectErrorStream(false);
+                Process proc = pb.start();
                 foundProgram = true;
                 BufferedReader stdOutReader = new BufferedReader(
                         new InputStreamReader(proc.getInputStream()));
