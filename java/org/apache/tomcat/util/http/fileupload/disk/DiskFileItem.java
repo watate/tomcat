@@ -375,11 +375,23 @@ public class DiskFileItem
      */
     @Override
     public void write(final File file) throws Exception {
-        // Normalize and validate the destination path to prevent path traversal
-        final File normalizedFile = validateDestinationPath(file);
+        // Validate the destination path to prevent path traversal attacks.
+        // Normalize the path, then verify it resides within the allowed base directory.
+        final Path normalizedDest = file.toPath().toAbsolutePath().normalize();
+        final Path basePath;
+        if (repository != null) {
+            basePath = repository.toPath().toAbsolutePath().normalize();
+        } else {
+            basePath = new File(System.getProperty("java.io.tmpdir"))
+                    .toPath().toAbsolutePath().normalize();
+        }
+        if (!normalizedDest.startsWith(basePath)) {
+            throw new IOException(
+                    "Invalid destination path: target is outside the allowed directory");
+        }
 
         if (isInMemory()) {
-            try (OutputStream fout = Files.newOutputStream(normalizedFile.toPath())) {
+            try (OutputStream fout = Files.newOutputStream(file.toPath())) {
                 fout.write(get());
             } catch (final IOException e) {
                 throw new IOException("Unexpected output data");
@@ -401,16 +413,16 @@ public class DiskFileItem
              * in a temporary location so move it to the
              * desired file.
              */
-            if (normalizedFile.exists() && !normalizedFile.delete()) {
+            if (file.exists() && !file.delete()) {
                 throw new FileUploadException(
                         "Cannot write uploaded file to disk!");
             }
-            if (!outputFile.renameTo(normalizedFile)) {
+            if (!outputFile.renameTo(file)) {
                 BufferedInputStream in = null;
                 BufferedOutputStream out = null;
                 try {
                     in = new BufferedInputStream(new FileInputStream(outputFile));
-                    out = new BufferedOutputStream(new FileOutputStream(normalizedFile));
+                    out = new BufferedOutputStream(new FileOutputStream(file));
                     IOUtils.copy(in, out);
                     out.close();
                 } finally {
@@ -419,42 +431,6 @@ public class DiskFileItem
                 }
             }
         }
-    }
-
-    /**
-     * Validates and normalizes a destination file path to prevent path traversal attacks.
-     * Resolves the path to its normalized canonical form and ensures it does not contain
-     * any ".." traversal components.
-     *
-     * @param file The destination file to validate
-     * @return The validated file with a normalized, canonical path
-     * @throws IOException if the path contains traversal sequences or cannot be resolved
-     */
-    private static File validateDestinationPath(final File file) throws IOException {
-        final Path normalizedPath = file.toPath().normalize();
-
-        // Reject paths that still contain ".." components after normalization
-        for (int i = 0; i < normalizedPath.getNameCount(); i++) {
-            if ("..".equals(normalizedPath.getName(i).toString())) {
-                throw new IOException(
-                        "Invalid destination path: path traversal is not allowed");
-            }
-        }
-
-        // Resolve to canonical form to handle symlinks
-        final File canonicalFile = normalizedPath.toFile().getCanonicalFile();
-
-        // Ensure the canonical path resides within its expected parent directory
-        final File canonicalParent = canonicalFile.getParentFile();
-        if (canonicalParent != null) {
-            final String parentPath = canonicalParent.getCanonicalPath();
-            if (!canonicalFile.getCanonicalPath().startsWith(parentPath + File.separator)) {
-                throw new IOException(
-                        "Invalid destination path: resolved path escapes target directory");
-            }
-        }
-
-        return canonicalFile;
     }
 
     /**
