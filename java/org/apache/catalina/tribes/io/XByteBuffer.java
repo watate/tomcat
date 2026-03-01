@@ -20,6 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidClassException;
+import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -567,6 +569,9 @@ public class XByteBuffer implements Serializable {
 
     private static final AtomicInteger invokecount = new AtomicInteger(0);
 
+    private static final ObjectInputFilter SAFE_DESERIALIZATION_FILTER =
+            ObjectInputFilter.Config.createFilter("maxdepth=20;maxrefs=10000;maxbytes=10485760;java.base/*;org.apache.catalina.tribes.**;!*");
+
     public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
         throws IOException, ClassNotFoundException, ClassCastException {
         invokecount.addAndGet(1);
@@ -578,9 +583,15 @@ public class XByteBuffer implements Serializable {
             InputStream  instream = new ByteArrayInputStream(data,offset,length);
             ObjectInputStream stream = null;
             stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
-            message = stream.readObject();
-            instream.close();
-            stream.close();
+            stream.setObjectInputFilter(SAFE_DESERIALIZATION_FILTER);
+            try {
+                message = stream.readObject();
+            } catch (InvalidClassException ice) {
+                throw ice;
+            } finally {
+                instream.close();
+                stream.close();
+            }
         }
         if ( message == null ) {
             return null;
