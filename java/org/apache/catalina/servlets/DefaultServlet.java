@@ -56,6 +56,7 @@ import javax.servlet.UnavailableException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -1780,6 +1781,19 @@ public class DefaultServlet extends HttpServlet {
             }
 
             TransformerFactory tFactory = TransformerFactory.newInstance();
+            try {
+                // Harden against XXE and external resource access
+                tFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            } catch (Exception e) {
+                // Ignore if not supported by the JAXP implementation
+            }
+            try {
+                tFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                tFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+                tFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+            } catch (Exception e) {
+                // Ignore if not supported by the JAXP implementation
+            }
             Source xmlSource = new StreamSource(new StringReader(sb.toString()));
             Transformer transformer = tFactory.newTransformer(xsltSource);
 
