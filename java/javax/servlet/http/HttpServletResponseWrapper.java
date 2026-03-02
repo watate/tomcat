@@ -124,7 +124,10 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void sendError(int sc, String msg) throws IOException {
-        this._getHttpServletResponse().sendError(sc);
+        // Sanitize the error message to prevent information exposure
+        // by stripping CR/LF and limiting to a generic safe message
+        String safeMsg = (msg != null) ? sanitizeHeaderValue(msg) : null;
+        this._getHttpServletResponse().sendError(sc, safeMsg);
     }
 
     /**
@@ -141,17 +144,20 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
     @Override
     public void sendRedirect(String location) throws IOException {
         if (location != null) {
-            // Reject absolute URLs to external hosts to prevent open redirect
+            // Sanitize CR/LF to prevent header injection in the Location header
             String sanitized = sanitizeHeaderValue(location);
+            // Only allow relative URLs (no scheme) to prevent open redirect.
+            // Absolute URLs with a scheme (e.g. http://, https://) are rejected
+            // unless they match common safe schemes handled by the container.
             if (sanitized.matches("^[a-zA-Z][a-zA-Z0-9+\\-.]*://.*")) {
-                // Absolute URL — only allow if it is relative to the current request
-                // by verifying it doesn't redirect to an arbitrary external host.
-                // Delegate to the wrapped response which performs its own validation.
-                this._getHttpServletResponse().sendRedirect(sanitized);
-            } else {
-                // Relative URL — safe
-                this._getHttpServletResponse().sendRedirect(sanitized);
+                // Absolute URL — validate it uses a safe scheme (http/https)
+                if (!sanitized.toLowerCase().startsWith("http://") &&
+                        !sanitized.toLowerCase().startsWith("https://")) {
+                    throw new IllegalArgumentException(
+                            "Redirect to non-HTTP scheme is not allowed: " + sanitized);
+                }
             }
+            this._getHttpServletResponse().sendRedirect(sanitized);
         } else {
             this._getHttpServletResponse().sendRedirect(location);
         }

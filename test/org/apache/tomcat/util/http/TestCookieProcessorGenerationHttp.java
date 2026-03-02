@@ -78,7 +78,7 @@ public class TestCookieProcessorGenerationHttp extends TomcatBaseTest {
         protected void doGet(HttpServletRequest req, HttpServletResponse resp)
                 throws ServletException, IOException {
             Cookie cookie = new Cookie("Test", cookieValue);
-            cookie.setSecure(req.isSecure());
+            cookie.setSecure(true);
             resp.addCookie(cookie);
             resp.setContentType("text/plain");
             resp.getWriter().print("OK");
