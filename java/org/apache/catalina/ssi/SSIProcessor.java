@@ -26,6 +26,7 @@ import java.util.Locale;
 import java.util.StringTokenizer;
 
 import org.apache.catalina.util.IOTools;
+import org.apache.tomcat.util.security.Escape;
 /**
  * The entry point to SSI processing. This class does the actual parsing,
  * delegating to the SSIMediator, SSICommand, and SSIExternalResolver as
@@ -114,9 +115,11 @@ public class SSIProcessor {
                         index += COMMAND_START.length();
                         command.setLength(0); //clear the command string
                     } else {
-                        if (!ssiMediator.getConditionalState().processConditionalCommandsOnly) {
-                            writer.write(c);
-                        }
+                            if (!ssiMediator.getConditionalState().processConditionalCommandsOnly) {
+                                // HTML-encode raw template characters to prevent
+                                // XSS from user-influenced file content
+                                writer.write(Escape.htmlElementContent(String.valueOf(c)));
+                            }
                         index++;
                     }
                 } else {

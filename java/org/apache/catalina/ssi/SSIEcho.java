@@ -64,7 +64,8 @@ public class SSIEcho implements SSICommand {
         if (variableValue == null) {
             variableValue = MISSING_VARIABLE_VALUE;
         }
-        writer.write(variableValue);
+        // Always HTML-encode output to prevent XSS and error information exposure
+        writer.write(ssiMediator.encode(variableValue, SSIMediator.ENCODING_ENTITY));
         return System.currentTimeMillis();
     }
 
