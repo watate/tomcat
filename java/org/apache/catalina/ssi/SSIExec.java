@@ -66,7 +66,7 @@ public class SSIExec implements SSICommand {
                     return lastModified;
                 }
                 Runtime rt = Runtime.getRuntime();
-                Process proc = rt.exec(new String[]{"sh", "-c", substitutedValue});
+                Process proc = rt.exec(substitutedValue);
                 foundProgram = true;
                 BufferedReader stdOutReader = new BufferedReader(
                         new InputStreamReader(proc.getInputStream()));

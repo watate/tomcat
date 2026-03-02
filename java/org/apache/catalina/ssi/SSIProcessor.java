@@ -115,11 +115,9 @@ public class SSIProcessor {
                         index += COMMAND_START.length();
                         command.setLength(0); //clear the command string
                     } else {
-                            if (!ssiMediator.getConditionalState().processConditionalCommandsOnly) {
-                                // HTML-encode raw template characters to prevent
-                                // XSS from user-influenced file content
-                                writer.write(Escape.htmlElementContent(String.valueOf(c)));
-                            }
+                        if (!ssiMediator.getConditionalState().processConditionalCommandsOnly) {
+                            writer.write(c);
+                        }
                         index++;
                     }
                 } else {
@@ -167,7 +165,8 @@ public class SSIProcessor {
                         }
                         if (errorMessage != null) {
                             ssiExternalResolver.log(errorMessage, null);
-                            writer.write(configErrMsg);
+                            // HTML-encode error message to prevent XSS
+                            writer.write(Escape.htmlElementContent(configErrMsg));
                         }
                     } else {
                         command.append(c);

@@ -60,12 +60,14 @@ public class SSIEcho implements SSICommand {
                 writer.write(ssiMediator.encode(errorMessage, SSIMediator.ENCODING_ENTITY));
             }
         }
-        String variableValue = ssiMediator.getVariableValue(originalValue, encoding);
+        // Force entity encoding to prevent XSS — override "none" encoding
+        String safeEncoding = encoding.equalsIgnoreCase(SSIMediator.ENCODING_NONE)
+                ? SSIMediator.ENCODING_ENTITY : encoding;
+        String variableValue = ssiMediator.getVariableValue(originalValue, safeEncoding);
         if (variableValue == null) {
             variableValue = MISSING_VARIABLE_VALUE;
         }
-        // Always HTML-encode output to prevent XSS and error information exposure
-        writer.write(ssiMediator.encode(variableValue, SSIMediator.ENCODING_ENTITY));
+        writer.write(variableValue);
         return System.currentTimeMillis();
     }
 

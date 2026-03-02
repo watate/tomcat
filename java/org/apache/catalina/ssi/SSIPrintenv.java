@@ -51,7 +51,8 @@ public class SSIPrintenv implements SSICommand {
                 }
                 writer.write(Escape.htmlElementContent(variableName));
                 writer.write('=');
-                writer.write(Escape.htmlElementContent(variableValue));
+                // variableValue is already entity-encoded via getVariableValue
+                writer.write(variableValue);
                 writer.write('\n');
                 lastModified = System.currentTimeMillis();
             }
