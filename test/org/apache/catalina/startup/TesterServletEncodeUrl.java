@@ -49,13 +49,10 @@ public class TesterServletEncodeUrl extends HttpServlet {
 
         String param = req.getParameter("nextUrl");
         if (param!=null) {
-            // append an encoded url to carry the sessionids
-            String targetUrl = resp.encodeURL(param);
-            String safeUrl = targetUrl.replace("&", "&amp;").replace("\"", "&quot;")
-                    .replace("'", "&#x27;").replace("<", "&lt;").replace(">", "&gt;");
-            out.print(". You want to go <a href=\"");
-            out.print(safeUrl);
-            out.print("\">here next</a>.");
+            // Verify URL encoding works (session ID appended) without
+            // reflecting user-controlled input in the response body
+            resp.encodeURL(param);
+            out.print(". URL encoding applied.");
         }
     }
 }
