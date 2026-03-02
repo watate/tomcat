@@ -26,7 +26,6 @@ import java.net.URISyntaxException;
 import java.net.URLConnection;
 import java.security.KeyStore;
 import java.security.cert.Certificate;
-import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
@@ -36,7 +35,6 @@ import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
 
 import org.apache.catalina.tribes.util.StringManager;
 import org.apache.juli.logging.Log;
@@ -46,18 +44,16 @@ public abstract class AbstractStreamProvider implements StreamProvider {
     private static final Log log = LogFactory.getLog(AbstractStreamProvider.class);
     protected static final StringManager sm = StringManager.getManager(AbstractStreamProvider.class);
 
-    protected static final TrustManager[] INSECURE_TRUST_MANAGERS = new TrustManager[] {
-            new X509TrustManager() {
-                @Override
-                public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {}
-                @Override
-                public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {}
-                @Override
-                public X509Certificate[] getAcceptedIssuers() {
-                    return null;
-                }
-            }
-        };
+    /**
+     * Returns the default trust managers from the JVM trust store.
+     * @return the default trust managers
+     * @throws Exception if the trust managers cannot be initialized
+     */
+    protected static TrustManager[] getDefaultTrustManagers() throws Exception {
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        tmf.init((KeyStore) null);
+        return tmf.getTrustManagers();
+    }
 
     /**
      * @return the socket factory, or null if not needed
@@ -145,7 +141,7 @@ public abstract class AbstractStreamProvider implements StreamProvider {
             }
         } else {
             log.warn(sm.getString("abstractStream.CACertUndefined"));
-            return InsecureStreamProvider.INSECURE_TRUST_MANAGERS;
+            return getDefaultTrustManagers();
         }
     }
 }

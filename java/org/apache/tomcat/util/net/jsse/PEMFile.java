@@ -45,10 +45,13 @@ import javax.crypto.Cipher;
 import javax.crypto.EncryptedPrivateKeyInfo;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.buf.Asn1Parser;
 import org.apache.tomcat.util.buf.Asn1Writer;
 import org.apache.tomcat.util.codec.binary.Base64;
@@ -60,6 +63,7 @@ import org.apache.tomcat.util.res.StringManager;
  */
 public class PEMFile {
 
+    private static final Log log = LogFactory.getLog(PEMFile.class);
     private static final StringManager sm = StringManager.getManager(PEMFile.class);
 
     private static final byte[] OID_EC_PUBLIC_KEY =
@@ -234,8 +238,12 @@ public class PEMFile {
 
                     // Is there a generic way to derive these three values from
                     // just the algorithm name?
+                    boolean useGcm = false;
+
                     switch (algorithm) {
                         case "DES-CBC": {
+                            // Legacy format - DES is insecure, prefer AES
+                            log.warn(sm.getString("pemFile.weakEncryption", algorithm));
                             secretKeyAlgorithm = "DES";
                             cipherTransformation = "DES/CBC/PKCS5Padding";
                             keyLength = 8;
@@ -247,10 +255,28 @@ public class PEMFile {
                             keyLength = 24;
                             break;
                         }
+                        case "AES-128-CBC":
+                        case "AES-192-CBC":
                         case "AES-256-CBC": {
                             secretKeyAlgorithm = "AES";
                             cipherTransformation = "AES/CBC/PKCS5Padding";
+                            // Derive key length from algorithm name:
+                            // AES-128 = 16 bytes, AES-192 = 24 bytes, AES-256 = 32 bytes
+                            keyLength = Integer.parseInt(algorithm.split("-")[1]) / 8;
+                            break;
+                        }
+                        case "AES-128-GCM": {
+                            secretKeyAlgorithm = "AES";
+                            cipherTransformation = "AES/GCM/NoPadding";
+                            keyLength = 16;
+                            useGcm = true;
+                            break;
+                        }
+                        case "AES-256-GCM": {
+                            secretKeyAlgorithm = "AES";
+                            cipherTransformation = "AES/GCM/NoPadding";
                             keyLength = 32;
+                            useGcm = true;
                             break;
                         }
                         default:
@@ -265,7 +291,11 @@ public class PEMFile {
                     byte[] key = deriveKey(keyLength, password, iv);
                     SecretKey secretKey = new SecretKeySpec(key, secretKeyAlgorithm);
                     Cipher cipher = Cipher.getInstance(cipherTransformation);
-                    cipher.init(Cipher.DECRYPT_MODE, secretKey, new IvParameterSpec(iv));
+                    if (useGcm) {
+                        cipher.init(Cipher.DECRYPT_MODE, secretKey, new GCMParameterSpec(128, iv));
+                    } else {
+                        cipher.init(Cipher.DECRYPT_MODE, secretKey, new IvParameterSpec(iv));
+                    }
                     byte[] pkcs1 = cipher.doFinal(decode());
                     keySpec = parsePKCS1(pkcs1);
                 }
