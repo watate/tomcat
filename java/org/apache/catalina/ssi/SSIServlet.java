@@ -25,7 +25,11 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URL;
 import java.net.URLConnection;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
@@ -43,6 +47,11 @@ import javax.servlet.http.HttpServletResponse;
  */
 public class SSIServlet extends HttpServlet {
     private static final long serialVersionUID = 1L;
+
+    /** Allowed URL protocols for SSI resource loading. */
+    private static final Set<String> ALLOWED_PROTOCOLS =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+                    "file", "jndi", "jar")));
 
     /** Debug level for this servlet. */
     protected int debug = 0;
@@ -169,6 +178,11 @@ public class SSIServlet extends HttpServlet {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
+        // Reject path traversal sequences to prevent path injection
+        if (path.contains("..") || path.contains("//")) {
+            res.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
         URL resource = servletContext.getResource(path);
         if (resource == null) {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
@@ -203,6 +217,11 @@ public class SSIServlet extends HttpServlet {
             printWriter = res.getWriter();
         }
 
+        // Validate the resource URL protocol to prevent SSRF
+        if (!ALLOWED_PROTOCOLS.contains(resource.getProtocol())) {
+            throw new IOException("Disallowed protocol in SSI resource URL: "
+                    + resource.getProtocol());
+        }
         URLConnection resourceInfo = resource.openConnection();
         InputStream resourceInputStream = resourceInfo.getInputStream();
         String encoding = resourceInfo.getContentEncoding();

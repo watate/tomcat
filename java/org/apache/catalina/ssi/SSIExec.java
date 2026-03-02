@@ -21,6 +21,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.util.regex.Pattern;
 
 import org.apache.catalina.util.IOTools;
 import org.apache.tomcat.util.res.StringManager;
@@ -57,6 +58,13 @@ public class SSIExec implements SSICommand {
         } else if (paramName.equalsIgnoreCase("cmd")) {
             boolean foundProgram = false;
             try {
+                // Validate command to prevent command injection via
+                // shell metacharacters in user-provided values
+                if (!isValidCommand(substitutedValue)) {
+                    ssiMediator.log(sm.getString("ssiExec.invalidCommand", substitutedValue));
+                    writer.write(configErrMsg);
+                    return lastModified;
+                }
                 Runtime rt = Runtime.getRuntime();
                 Process proc = rt.exec(substitutedValue);
                 foundProgram = true;
@@ -81,5 +89,21 @@ public class SSIExec implements SSICommand {
             }
         }
         return lastModified;
+    }
+
+
+    /**
+     * Validates a command string to prevent command injection.
+     * Rejects commands containing shell metacharacters that could be
+     * used to chain or redirect commands.
+     */
+    private static final Pattern SHELL_META_CHARS =
+            Pattern.compile("[;|&`$><()\\{}\\[\\]!]");
+
+    private static boolean isValidCommand(String command) {
+        if (command == null || command.trim().isEmpty()) {
+            return false;
+        }
+        return !SHELL_META_CHARS.matcher(command).find();
     }
 }

@@ -389,11 +389,12 @@ public class ExpressionParseTree {
             int val2Len = val2.length();
             if (val2Len > 1 && val2.charAt(0) == '/' &&
                     val2.charAt(val2Len - 1) == '/') {
-                // Treat as a regular expression
+                // Treat as a regular expression - quote the pattern
+                // to prevent regex injection from user-provided values
                 String expr = val2.substring(1, val2Len - 1);
                 ssiMediator.clearMatchGroups();
                 try {
-                    Pattern pattern = Pattern.compile(expr);
+                    Pattern pattern = Pattern.compile(Pattern.quote(expr));
                     // Regular expressions will only ever be used with EqualNode
                     // so return zero for equal and non-zero for not equal
                     Matcher matcher = pattern.matcher(val1);

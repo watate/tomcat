@@ -49,11 +49,9 @@ public final class SSIConfig implements SSICommand {
                 ssiMediator.setConfigTimeFmt(substitutedValue);
             } else {
                 ssiMediator.log(sm.getString("ssiCommand.invalidAttribute", paramName));
-                //We need to fetch this value each time, since it may change
-                // during the
-                // loop
-                String configErrMsg = ssiMediator.getConfigErrMsg();
-                writer.write(configErrMsg);
+                // Write static default error message to avoid exposing
+                // user-controlled configErrMsg content in the response
+                writer.write(SSIMediator.DEFAULT_CONFIG_ERR_MSG);
             }
         }
         // Setting config options doesn't really change the page

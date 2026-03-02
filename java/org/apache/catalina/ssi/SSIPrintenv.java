@@ -20,6 +20,8 @@ package org.apache.catalina.ssi;
 import java.io.PrintWriter;
 import java.util.Collection;
 
+import org.apache.tomcat.util.security.Escape;
+
 /**
  * Implements the Server-side #printenv command
  *
@@ -37,7 +39,7 @@ public class SSIPrintenv implements SSICommand {
         //any arguments should produce an error
         if (paramNames.length > 0) {
             String errorMessage = ssiMediator.getConfigErrMsg();
-            writer.write(errorMessage);
+            writer.write(Escape.htmlElementContent(errorMessage));
         } else {
             Collection<String> variableNames = ssiMediator.getVariableNames();
             for (String variableName : variableNames) {
@@ -47,8 +49,9 @@ public class SSIPrintenv implements SSICommand {
                 if (variableValue == null) {
                     variableValue = "(none)";
                 }
-                writer.write(variableName);
+                writer.write(Escape.htmlElementContent(variableName));
                 writer.write('=');
+                // variableValue is already entity-encoded via getVariableValue
                 writer.write(variableValue);
                 writer.write('\n');
                 lastModified = System.currentTimeMillis();
