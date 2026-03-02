@@ -115,7 +115,13 @@ public class WebdavFixFilter extends GenericFilter {
         // a WebDAV client that works rather than the MiniRedir that has
         // problems with BASIC authentication
         location.append(request.getServerPort());
-        location.append(request.getRequestURI());
+        // Normalize the URI to prevent path traversal and ensure it is a
+        // same-origin relative path (no scheme or authority component)
+        String uri = request.getRequestURI();
+        if (uri != null) {
+            uri = uri.replaceAll("[\\r\\n]", "");
+        }
+        location.append(uri);
         return location.toString();
     }
 

@@ -56,6 +56,7 @@ public abstract class CookiesBaseTest extends TomcatBaseTest {
                 throws IOException {
             try {
                 Cookie cookie = new Cookie(cookieName, cookieValue);
+                cookie.setSecure(req.isSecure());
                 res.addCookie(cookie);
                 res.getWriter().write("Cookie name ok");
             } catch (IllegalArgumentException iae) {

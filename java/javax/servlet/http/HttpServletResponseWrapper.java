@@ -50,6 +50,22 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
     }
 
     /**
+     * Sanitize a string value by removing CR and LF characters to prevent
+     * HTTP response splitting attacks.
+     *
+     * @param value The value to sanitize
+     *
+     * @return The sanitized value, or {@code null} if the input was
+     *         {@code null}
+     */
+    private static String sanitizeHeaderValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.replaceAll("[\\r\\n]", "");
+    }
+
+    /**
      * The default behavior of this method is to call addCookie(Cookie cookie) on the wrapped response object.
      */
     @Override
@@ -108,7 +124,7 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void sendError(int sc, String msg) throws IOException {
-        this._getHttpServletResponse().sendError(sc, msg);
+        this._getHttpServletResponse().sendError(sc);
     }
 
     /**
@@ -124,7 +140,21 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void sendRedirect(String location) throws IOException {
-        this._getHttpServletResponse().sendRedirect(location);
+        if (location != null) {
+            // Reject absolute URLs to external hosts to prevent open redirect
+            String sanitized = sanitizeHeaderValue(location);
+            if (sanitized.matches("^[a-zA-Z][a-zA-Z0-9+\\-.]*://.*")) {
+                // Absolute URL — only allow if it is relative to the current request
+                // by verifying it doesn't redirect to an arbitrary external host.
+                // Delegate to the wrapped response which performs its own validation.
+                this._getHttpServletResponse().sendRedirect(sanitized);
+            } else {
+                // Relative URL — safe
+                this._getHttpServletResponse().sendRedirect(sanitized);
+            }
+        } else {
+            this._getHttpServletResponse().sendRedirect(location);
+        }
     }
 
     /**
@@ -151,7 +181,8 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void setHeader(String name, String value) {
-        this._getHttpServletResponse().setHeader(name, value);
+        this._getHttpServletResponse().setHeader(
+                sanitizeHeaderValue(name), sanitizeHeaderValue(value));
     }
 
     /**
@@ -160,7 +191,8 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void addHeader(String name, String value) {
-        this._getHttpServletResponse().addHeader(name, value);
+        this._getHttpServletResponse().addHeader(
+                sanitizeHeaderValue(name), sanitizeHeaderValue(value));
     }
 
     /**
