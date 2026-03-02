@@ -55,7 +55,7 @@ public class CookieExample extends HttpServlet {
             String safeValue = cookieValue.replaceAll("[\\r\\n]", "");
             aCookie = new Cookie(safeName, safeValue);
             aCookie.setPath(request.getContextPath() + "/");
-            aCookie.setSecure(request.isSecure());
+            aCookie.setSecure(true);
             response.addCookie(aCookie);
         }
 
