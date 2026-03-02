@@ -24,7 +24,7 @@ public class InsecureStreamProvider extends AbstractStreamProvider {
 
     InsecureStreamProvider() throws Exception {
         SSLContext context = SSLContext.getInstance("TLS");
-        context.init(null, INSECURE_TRUST_MANAGERS, null);
+        context.init(null, getDefaultTrustManagers(), null);
         factory = context.getSocketFactory();
     }
 

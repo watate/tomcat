@@ -528,7 +528,11 @@ public class EncryptInterceptor extends ChannelInterceptorBase implements Encryp
             Cipher cipher = null;
 
             int ivSize = getIVSize();
-            AlgorithmParameterSpec IV = generateIV(bytes, 0, ivSize);
+            // Extract IV bytes into a dedicated array from the prepended
+            // random IV that was generated during encryption.
+            byte[] ivBytes = new byte[ivSize];
+            System.arraycopy(bytes, 0, ivBytes, 0, ivSize);
+            AlgorithmParameterSpec IV = generateIV(ivBytes, 0, ivSize);
 
             try {
                 cipher = getCipher();
