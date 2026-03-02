@@ -2862,7 +2862,7 @@ public class Request implements HttpServletRequest {
                             // Equals sign
                             postSize++;
                             // Value length
-                            postSize += part.getSize();
+                            postSize += (int) part.getSize();
                             // Value separator
                             postSize++;
                             if (postSize > maxPostSize) {

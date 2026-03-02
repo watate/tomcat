@@ -764,7 +764,7 @@ public abstract class WsRemoteEndpointImplBase implements RemoteEndpoint {
             b -= 128;
         }
 
-        b += (rsv << 4);
+        b = (byte) (b + (rsv << 4));
 
         if (first) {
             // This is the first fragment of this message

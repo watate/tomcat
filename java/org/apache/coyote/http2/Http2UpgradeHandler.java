@@ -764,7 +764,7 @@ class Http2UpgradeHandler extends AbstractStream implements InternalHttpUpgradeH
                     headerFrameBuffers.getHeader()[3] = FrameType.CONTINUATION.getIdByte();
                 }
                 if (state == State.COMPLETE) {
-                    headerFrameBuffers.getHeader()[4] += FLAG_END_OF_HEADERS;
+                    headerFrameBuffers.getHeader()[4] = (byte) (headerFrameBuffers.getHeader()[4] + FLAG_END_OF_HEADERS);
                 }
                 if (log.isDebugEnabled()) {
                     log.debug(headerFrameBuffers.getPayload().limit() + " bytes");
