@@ -1775,6 +1775,7 @@ public class WebdavServlet extends DefaultServlet {
             throws IOException {
 
         resp.setStatus(WebdavStatus.SC_MULTI_STATUS);
+        resp.setContentType("text/xml; charset=UTF-8");
 
         XMLWriter generatedXML = new XMLWriter();
         generatedXML.writeXMLHeader();

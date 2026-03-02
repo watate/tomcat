@@ -108,7 +108,7 @@ public class XMLWriter {
      */
     public void writeProperty(String namespace, String name, String value) {
         writeElement(namespace, name, OPENING);
-        buffer.append(value);
+        buffer.append(Escape.xml(value));
         writeElement(namespace, name, CLOSING);
     }
 

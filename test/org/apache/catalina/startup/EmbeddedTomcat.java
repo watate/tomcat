@@ -94,7 +94,8 @@ public class EmbeddedTomcat {
             log.debug("Enter CounterServlet");
             req.getSession(true);
             resp.setContentType("text/plain");
-            resp.getWriter().print("OK: " + req.getRequestURL() + "[" + callCount.incrementAndGet()+ "]");
+            resp.setHeader("X-Content-Type-Options", "nosniff");
+            resp.getWriter().print("OK: [" + callCount.incrementAndGet()+ "]");
             resp.flushBuffer();
             log.debug("Exit CounterServlet");
 
