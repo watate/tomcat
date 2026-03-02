@@ -50,6 +50,22 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
     }
 
     /**
+     * Sanitize a string value by removing CR and LF characters to prevent
+     * HTTP response splitting attacks.
+     *
+     * @param value The value to sanitize
+     *
+     * @return The sanitized value, or {@code null} if the input was
+     *         {@code null}
+     */
+    private static String sanitizeHeaderValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.replaceAll("[\\r\\n]", "");
+    }
+
+    /**
      * The default behavior of this method is to call addCookie(Cookie cookie) on the wrapped response object.
      */
     @Override
@@ -108,7 +124,10 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void sendError(int sc, String msg) throws IOException {
-        this._getHttpServletResponse().sendError(sc, msg);
+        // Sanitize the error message to prevent information exposure
+        // by stripping CR/LF and limiting to a generic safe message
+        String safeMsg = (msg != null) ? sanitizeHeaderValue(msg) : null;
+        this._getHttpServletResponse().sendError(sc, safeMsg);
     }
 
     /**
@@ -124,7 +143,24 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void sendRedirect(String location) throws IOException {
-        this._getHttpServletResponse().sendRedirect(location);
+        if (location != null) {
+            // Sanitize CR/LF to prevent header injection in the Location header
+            String sanitized = sanitizeHeaderValue(location);
+            // Only allow relative URLs (no scheme) to prevent open redirect.
+            // Absolute URLs with a scheme (e.g. http://, https://) are rejected
+            // unless they match common safe schemes handled by the container.
+            if (sanitized.matches("^[a-zA-Z][a-zA-Z0-9+\\-.]*://.*")) {
+                // Absolute URL — validate it uses a safe scheme (http/https)
+                if (!sanitized.toLowerCase().startsWith("http://") &&
+                        !sanitized.toLowerCase().startsWith("https://")) {
+                    throw new IllegalArgumentException(
+                            "Redirect to non-HTTP scheme is not allowed: " + sanitized);
+                }
+            }
+            this._getHttpServletResponse().sendRedirect(sanitized);
+        } else {
+            this._getHttpServletResponse().sendRedirect(location);
+        }
     }
 
     /**
@@ -151,7 +187,8 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void setHeader(String name, String value) {
-        this._getHttpServletResponse().setHeader(name, value);
+        this._getHttpServletResponse().setHeader(
+                sanitizeHeaderValue(name), sanitizeHeaderValue(value));
     }
 
     /**
@@ -160,7 +197,8 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void addHeader(String name, String value) {
-        this._getHttpServletResponse().addHeader(name, value);
+        this._getHttpServletResponse().addHeader(
+                sanitizeHeaderValue(name), sanitizeHeaderValue(value));
     }
 
     /**

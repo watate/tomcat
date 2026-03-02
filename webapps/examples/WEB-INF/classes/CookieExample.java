@@ -50,8 +50,12 @@ public class CookieExample extends HttpServlet {
         String cookieValue = request.getParameter("cookievalue");
         Cookie aCookie = null;
         if (cookieName != null && cookieValue != null) {
-            aCookie = new Cookie(cookieName, cookieValue);
+            // Sanitize cookie name and value to prevent HTTP response splitting
+            String safeName = cookieName.replaceAll("[\\r\\n]", "");
+            String safeValue = cookieValue.replaceAll("[\\r\\n]", "");
+            aCookie = new Cookie(safeName, safeValue);
             aCookie.setPath(request.getContextPath() + "/");
+            aCookie.setSecure(true);
             response.addCookie(aCookie);
         }
 

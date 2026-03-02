@@ -60,7 +60,7 @@ public class TestCookieProcessorGenerationHttp extends TomcatBaseTest {
         byte[] headerBytes = cookieHeaders.get(0).getBytes(StandardCharsets.ISO_8859_1);
         // Now convert those bytes to a String using UTF-8
         String utf8Header = new String(headerBytes, StandardCharsets.UTF_8);
-        Assert.assertEquals("Test=\u0120", utf8Header);
+        Assert.assertEquals("Test=\u0120; Secure", utf8Header);
     }
 
 
@@ -78,6 +78,7 @@ public class TestCookieProcessorGenerationHttp extends TomcatBaseTest {
         protected void doGet(HttpServletRequest req, HttpServletResponse resp)
                 throws ServletException, IOException {
             Cookie cookie = new Cookie("Test", cookieValue);
+            cookie.setSecure(true);
             resp.addCookie(cookie);
             resp.setContentType("text/plain");
             resp.getWriter().print("OK");

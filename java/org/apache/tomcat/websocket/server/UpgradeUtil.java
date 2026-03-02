@@ -178,7 +178,11 @@ public class UpgradeUtil {
         resp.setHeader(HandshakeResponse.SEC_WEBSOCKET_ACCEPT, getWebSocketAccept(key));
         if (subProtocol != null && subProtocol.length() > 0) {
             // RFC6455 4.2.2 explicitly states "" is not valid here
-            resp.setHeader(Constants.WS_PROTOCOL_HEADER_NAME, subProtocol);
+            // Sanitize to prevent HTTP response splitting via CR/LF injection
+            String sanitizedSubProtocol = subProtocol.replaceAll("[\\r\\n]", "");
+            if (sanitizedSubProtocol.length() > 0) {
+                resp.setHeader(Constants.WS_PROTOCOL_HEADER_NAME, sanitizedSubProtocol);
+            }
         }
         if (!transformations.isEmpty()) {
             resp.setHeader(Constants.WS_EXTENSIONS_HEADER_NAME, responseHeaderExtensions.toString());
