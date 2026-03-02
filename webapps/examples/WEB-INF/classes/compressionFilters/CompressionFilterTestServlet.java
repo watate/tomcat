@@ -25,8 +25,6 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.tomcat.util.security.Escape;
-
 /**
  * Very Simple test servlet to test compression filter
  * @author Amy Roh
@@ -45,7 +43,6 @@ public class CompressionFilterTestServlet extends HttpServlet {
         Enumeration<String> e = request.getHeaders("Accept-Encoding");
         while (e.hasMoreElements()) {
             String name = e.nextElement();
-            out.println(Escape.htmlElementContent(name));
             if (name.indexOf("gzip") != -1) {
                 out.println("gzip supported -- able to compress");
             } else {
