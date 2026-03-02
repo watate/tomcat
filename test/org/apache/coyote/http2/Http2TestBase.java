@@ -249,7 +249,7 @@ public abstract class Http2TestBase extends TomcatBaseTest {
         // Flags. end of headers (0x04). end of stream (0x01)
         frameHeader[4] = 0x05;
         if (padding != null) {
-            frameHeader[4] += 0x08;
+            frameHeader[4] = (byte) (frameHeader[4] + 0x08);
         }
         // Stream id
         ByteUtil.set31Bits(frameHeader, 5, streamId);
@@ -422,7 +422,7 @@ public abstract class Http2TestBase extends TomcatBaseTest {
             dataFrameHeader[4] = 0x00;
         }
         if (padding != null) {
-            dataFrameHeader[4] += 0x08;
+            dataFrameHeader[4] = (byte) (dataFrameHeader[4] + 0x08);
         }
         ByteUtil.set31Bits(dataFrameHeader, 5, streamId);
 

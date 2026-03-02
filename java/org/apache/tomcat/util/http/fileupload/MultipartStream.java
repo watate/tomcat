@@ -948,7 +948,7 @@ public class MultipartStream {
                 }
             }
             final long res = Math.min(av, bytes);
-            head += res;
+            head += (int) res;
             return res;
         }
 
