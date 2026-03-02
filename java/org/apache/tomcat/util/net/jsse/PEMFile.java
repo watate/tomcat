@@ -255,22 +255,14 @@ public class PEMFile {
                             keyLength = 24;
                             break;
                         }
-                        case "AES-128-CBC": {
-                            secretKeyAlgorithm = "AES";
-                            cipherTransformation = "AES/CBC/PKCS5Padding";
-                            keyLength = 16;
-                            break;
-                        }
-                        case "AES-192-CBC": {
-                            secretKeyAlgorithm = "AES";
-                            cipherTransformation = "AES/CBC/PKCS5Padding";
-                            keyLength = 24;
-                            break;
-                        }
+                        case "AES-128-CBC":
+                        case "AES-192-CBC":
                         case "AES-256-CBC": {
                             secretKeyAlgorithm = "AES";
                             cipherTransformation = "AES/CBC/PKCS5Padding";
-                            keyLength = 32;
+                            // Derive key length from algorithm name:
+                            // AES-128 = 16 bytes, AES-192 = 24 bytes, AES-256 = 32 bytes
+                            keyLength = Integer.parseInt(algorithm.split("-")[1]) / 8;
                             break;
                         }
                         case "AES-128-GCM": {
