@@ -37,6 +37,7 @@ import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.modeler.Registry;
 import org.apache.tomcat.util.scan.StandardJarScanFilter;
 import org.apache.tomcat.util.scan.StandardJarScanner;
+import org.apache.tomcat.util.security.Escape;
 
 @Ignore
 public class EmbeddedTomcat {
@@ -94,7 +95,7 @@ public class EmbeddedTomcat {
             log.debug("Enter CounterServlet");
             req.getSession(true);
             resp.setContentType("text/plain");
-            resp.getWriter().print("OK: " + req.getRequestURL() + "[" + callCount.incrementAndGet()+ "]");
+            resp.getWriter().print("OK: " + Escape.htmlElementContent(req.getRequestURL().toString()) + "[" + callCount.incrementAndGet()+ "]");
             resp.flushBuffer();
             log.debug("Exit CounterServlet");
 

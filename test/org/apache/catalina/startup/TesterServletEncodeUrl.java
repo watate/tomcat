@@ -24,6 +24,8 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.tomcat.util.security.Escape;
+
 /**
  * A test servlet that will always encode the url in case the client requires
  * session persistence but is not configured to support cookies.
@@ -52,7 +54,7 @@ public class TesterServletEncodeUrl extends HttpServlet {
             // append an encoded url to carry the sessionids
             String targetUrl = resp.encodeURL(param);
             out.print(". You want to go <a href=\"");
-            out.print(targetUrl);
+            out.print(Escape.htmlElementContent(targetUrl));
             out.print("\">here next</a>.");
         }
     }

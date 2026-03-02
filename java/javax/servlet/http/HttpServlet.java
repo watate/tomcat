@@ -467,6 +467,7 @@ public abstract class HttpServlet extends GenericServlet {
 
         resp.setContentType("message/http");
         resp.setContentLength(responseLength);
+        resp.setHeader("X-Content-Type-Options", "nosniff");
         ServletOutputStream out = resp.getOutputStream();
         out.print(buffer.toString());
         out.close();
