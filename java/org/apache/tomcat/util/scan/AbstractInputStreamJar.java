@@ -92,7 +92,12 @@ public abstract class AbstractInputStreamJar implements Jar {
         if (entry == null) {
             return null;
         } else {
-            return entry.getName();
+            String name = entry.getName();
+            // Validate entry name to prevent Zip Slip (CodeQL alert #48)
+            if (name != null && (name.contains("../") || name.contains("..\\"))) {
+                return null;
+            }
+            return name;
         }
     }
 
