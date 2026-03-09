@@ -104,6 +104,16 @@ public class FragmentJarScannerCallback implements JarScannerCallback {
         fragment.setDelegate(delegate);
 
         File fragmentFile = new File(file, FRAGMENT_LOCATION);
+        // Validate canonical path to prevent path injection (CodeQL alerts #99, #100)
+        String canonicalBase = file.getCanonicalPath();
+        String canonicalFragment = fragmentFile.getCanonicalPath();
+        if (!canonicalFragment.startsWith(canonicalBase + File.separator) &&
+                !canonicalFragment.equals(canonicalBase)) {
+            throw new IOException(
+                    "Path traversal detected: fragment path [" +
+                    canonicalFragment + "] is outside base directory [" +
+                    canonicalBase + "]");
+        }
         try {
             if (fragmentFile.isFile()) {
                 try (InputStream stream = new FileInputStream(fragmentFile)) {

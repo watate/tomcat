@@ -47,6 +47,7 @@ import javax.servlet.descriptor.JspConfigDescriptor;
 import org.apache.catalina.Globals;
 import org.apache.catalina.security.SecurityUtil;
 import org.apache.tomcat.util.ExceptionUtils;
+import org.apache.tomcat.util.http.RequestUtil;
 
 
 /**
@@ -181,6 +182,15 @@ public class ApplicationContextFacade implements ServletContext {
 
     @Override
     public URL getResource(String path) throws MalformedURLException {
+        // Validate path to prevent path traversal (CodeQL alert #50)
+        if (path != null) {
+            String normalized = RequestUtil.normalize(path);
+            if (normalized == null) {
+                throw new MalformedURLException(
+                        "Invalid resource path (path traversal detected): " + path);
+            }
+            path = normalized;
+        }
         if (Globals.IS_SECURITY_ENABLED) {
             try {
                 return (URL) invokeMethod(context, "getResource", new Object[] { path });
@@ -209,6 +219,15 @@ public class ApplicationContextFacade implements ServletContext {
 
     @Override
     public RequestDispatcher getRequestDispatcher(final String path) {
+        // Validate forward path to prevent unvalidated URL forward (CodeQL alert #18)
+        if (path == null || !path.startsWith("/")) {
+            return null;
+        }
+        String normalized = RequestUtil.normalize(path);
+        if (normalized == null) {
+            // Path traversal attempt detected
+            return null;
+        }
         if (SecurityUtil.isPackageProtectionEnabled()) {
             return (RequestDispatcher) doPrivileged("getRequestDispatcher", new Object[] { path });
         } else {

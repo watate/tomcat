@@ -187,7 +187,12 @@ public class JarFileUrlJar implements Jar {
         if (entry == null) {
             return null;
         } else {
-            return entry.getName();
+            String name = entry.getName();
+            // Validate entry name to prevent Zip Slip (CodeQL alert #49)
+            if (name != null && name.contains("..")) {
+                return null;
+            }
+            return name;
         }
     }
 
