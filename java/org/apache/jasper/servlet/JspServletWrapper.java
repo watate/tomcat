@@ -481,9 +481,10 @@ public class JspServletWrapper {
             }
             available = System.currentTimeMillis() +
                 (unavailableSeconds * 1000L);
+            // Use a generic message to avoid exposing internal error details
             response.sendError
                 (HttpServletResponse.SC_SERVICE_UNAVAILABLE,
-                 ex.getMessage());
+                 Localizer.getMessage("jsp.error.unavailable"));
         } catch (ServletException | IllegalStateException ex) {
             if(options.getDevelopment()) {
                 throw handleJspException(ex);

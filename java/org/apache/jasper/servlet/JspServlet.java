@@ -357,6 +357,15 @@ public class JspServlet extends HttpServlet implements PeriodicEventListener {
                                 boolean precompile)
         throws ServletException, IOException {
 
+        // Normalize the JSP URI to prevent path traversal
+        if (jspUri != null) {
+            jspUri = org.apache.tomcat.util.http.RequestUtil.normalize(jspUri);
+            if (jspUri == null) {
+                handleMissingResource(request, response, jspUri);
+                return;
+            }
+        }
+
         JspServletWrapper wrapper = rctxt.getWrapper(jspUri);
         if (wrapper == null) {
             synchronized(this) {

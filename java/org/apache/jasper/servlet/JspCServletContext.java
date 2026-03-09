@@ -349,8 +349,21 @@ public class JspCServletContext implements ServletContext {
             return null;
         }
         try {
-            File f = new File(getResource(path).toURI());
-            return f.getAbsolutePath();
+            // Resolve the base directory from the resource base URL
+            File baseDir = new File(myResourceBaseURL.toURI());
+            String canonicalBase = baseDir.getCanonicalPath();
+
+            // Construct the target file from the base directory and the
+            // relative path (strip leading '/')
+            File f = new File(baseDir, path.substring(1));
+            String canonicalPath = f.getCanonicalPath();
+
+            // Validate the canonical path stays within the document root
+            if (!canonicalPath.equals(canonicalBase) &&
+                    !canonicalPath.startsWith(canonicalBase + File.separator)) {
+                return null;
+            }
+            return canonicalPath;
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             return null;
@@ -385,13 +398,24 @@ public class JspCServletContext implements ServletContext {
             throw new MalformedURLException(Localizer.getMessage("jsp.error.URLMustStartWithSlash", path));
         }
 
+        // Normalize the path to prevent path traversal
+        String normalizedPath = org.apache.tomcat.util.http.RequestUtil.normalize(path);
+        if (normalizedPath == null) {
+            return null;
+        }
+
         // Strip leading '/'
-        path = path.substring(1);
+        normalizedPath = normalizedPath.substring(1);
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
+            URI uri = new URI(myResourceBaseURL.toExternalForm() + normalizedPath);
             url = uri.toURL();
+            // Validate URL scheme to prevent SSRF - only allow file and jar schemes
+            String scheme = url.getProtocol();
+            if (!"file".equals(scheme) && !"jar".equals(scheme)) {
+                return null;
+            }
             try (InputStream is = url.openStream()) {
             }
         } catch (Throwable t) {
