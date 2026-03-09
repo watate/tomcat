@@ -117,10 +117,13 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
 
     /**
      * The default behavior of this method is to call sendError(int sc, String msg) on the wrapped response object.
+     * <p>
+     * The message is replaced with a generic error description to avoid exposing internal error details to external
+     * users.
      */
     @Override
     public void sendError(int sc, String msg) throws IOException {
-        this._getHttpServletResponse().sendError(sc, sanitizeErrorMessage(msg));
+        this._getHttpServletResponse().sendError(sc, msg != null ? "Server Error" : null);
     }
 
     /**
@@ -325,27 +328,4 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
         }
     }
 
-    /**
-     * Sanitize an error message so that raw internal details are not exposed to external users. The message is
-     * truncated and any characters that could be used for injection are removed.
-     *
-     * @param msg the raw error message (may be {@code null})
-     *
-     * @return a sanitized message safe for inclusion in an HTTP error response, or {@code null} if the input was
-     *             {@code null}
-     */
-    private static String sanitizeErrorMessage(String msg) {
-        if (msg == null) {
-            return null;
-        }
-        // Strip CR/LF to prevent header injection via error messages
-        StringBuilder sb = new StringBuilder(Math.min(msg.length(), 200));
-        for (int i = 0; i < msg.length() && sb.length() < 200; i++) {
-            char c = msg.charAt(i);
-            if (c != '\r' && c != '\n') {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
 }
