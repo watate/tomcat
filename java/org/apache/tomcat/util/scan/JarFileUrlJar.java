@@ -189,8 +189,17 @@ public class JarFileUrlJar implements Jar {
         } else {
             String name = entry.getName();
             // Validate entry name to prevent Zip Slip (CodeQL alert #49)
-            if (name != null && (name.contains("../") || name.contains("..\\"))) {
-                return null;
+            if (name != null) {
+                try {
+                    File baseDir = new File("").getAbsoluteFile();
+                    File entryFile = new File(baseDir, name);
+                    if (!entryFile.getCanonicalPath().startsWith(
+                            baseDir.getCanonicalPath() + File.separator)) {
+                        return null;
+                    }
+                } catch (IOException e) {
+                    return null;
+                }
             }
             return name;
         }
