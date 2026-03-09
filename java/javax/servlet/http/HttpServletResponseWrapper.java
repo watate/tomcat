@@ -54,6 +54,18 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void addCookie(Cookie cookie) {
+        if (cookie != null) {
+            String cookieName = cookie.getName();
+            String cookieValue = cookie.getValue();
+            if (cookieName != null && containsCROrLF(cookieName)) {
+                throw new IllegalArgumentException(
+                        "Cookie name must not contain CR or LF characters");
+            }
+            if (cookieValue != null && containsCROrLF(cookieValue)) {
+                throw new IllegalArgumentException(
+                        "Cookie value must not contain CR or LF characters");
+            }
+        }
         this._getHttpServletResponse().addCookie(cookie);
     }
 
@@ -105,10 +117,13 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
 
     /**
      * The default behavior of this method is to call sendError(int sc, String msg) on the wrapped response object.
+     * <p>
+     * The message is replaced with a generic error description to avoid exposing internal error details to external
+     * users.
      */
     @Override
     public void sendError(int sc, String msg) throws IOException {
-        this._getHttpServletResponse().sendError(sc, msg);
+        this._getHttpServletResponse().sendError(sc, msg != null ? "Server Error" : null);
     }
 
     /**
@@ -151,6 +166,8 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void setHeader(String name, String value) {
+        validateHeaderArgument("Header name", name);
+        validateHeaderArgument("Header value", value);
         this._getHttpServletResponse().setHeader(name, value);
     }
 
@@ -160,6 +177,8 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void addHeader(String name, String value) {
+        validateHeaderArgument("Header name", name);
+        validateHeaderArgument("Header value", value);
         this._getHttpServletResponse().addHeader(name, value);
     }
 
@@ -277,4 +296,36 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
     public Supplier<Map<String,String>> getTrailerFields() {
         return this._getHttpServletResponse().getTrailerFields();
     }
+
+    /**
+     * Check whether the given string contains a carriage return ('\r') or line feed ('\n') character.
+     *
+     * @param value the string to check
+     *
+     * @return {@code true} if the string contains CR or LF
+     */
+    private static boolean containsCROrLF(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\r' || c == '\n') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Validate that a header name or value does not contain CR or LF characters that could enable HTTP response
+     * splitting.
+     *
+     * @param description a description of the argument for use in exception messages
+     * @param value       the value to validate
+     */
+    private static void validateHeaderArgument(String description, String value) {
+        if (value != null && containsCROrLF(value)) {
+            throw new IllegalArgumentException(
+                    description + " must not contain CR or LF characters");
+        }
+    }
+
 }
