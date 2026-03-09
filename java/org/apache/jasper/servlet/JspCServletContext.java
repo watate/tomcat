@@ -348,9 +348,21 @@ public class JspCServletContext implements ServletContext {
         if (!path.startsWith("/")) {
             return null;
         }
+        // Normalize the path to prevent path traversal
+        String normalizedPath = org.apache.tomcat.util.http.RequestUtil.normalize(path);
+        if (normalizedPath == null) {
+            return null;
+        }
         try {
-            File f = new File(getResource(path).toURI());
-            return f.getAbsolutePath();
+            File f = new File(getResource(normalizedPath).toURI());
+            // Validate the canonical path stays within the document root
+            String canonicalPath = f.getCanonicalPath();
+            File baseDir = new File(myResourceBaseURL.toURI());
+            String canonicalBase = baseDir.getCanonicalPath();
+            if (!canonicalPath.startsWith(canonicalBase)) {
+                return null;
+            }
+            return canonicalPath;
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
             return null;
@@ -385,13 +397,24 @@ public class JspCServletContext implements ServletContext {
             throw new MalformedURLException(Localizer.getMessage("jsp.error.URLMustStartWithSlash", path));
         }
 
+        // Normalize the path to prevent path traversal
+        String normalizedPath = org.apache.tomcat.util.http.RequestUtil.normalize(path);
+        if (normalizedPath == null) {
+            return null;
+        }
+
         // Strip leading '/'
-        path = path.substring(1);
+        normalizedPath = normalizedPath.substring(1);
 
         URL url = null;
         try {
-            URI uri = new URI(myResourceBaseURL.toExternalForm() + path);
+            URI uri = new URI(myResourceBaseURL.toExternalForm() + normalizedPath);
             url = uri.toURL();
+            // Validate URL scheme to prevent SSRF - only allow file and jar schemes
+            String scheme = url.getProtocol();
+            if (!"file".equals(scheme) && !"jar".equals(scheme)) {
+                return null;
+            }
             try (InputStream is = url.openStream()) {
             }
         } catch (Throwable t) {

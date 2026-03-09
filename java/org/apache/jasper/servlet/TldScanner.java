@@ -333,12 +333,18 @@ public class TldScanner {
         @Override
         public void scan(File file, final String webappPath, boolean isWebapp)
                 throws IOException {
-            File metaInf = new File(file, "META-INF");
+            // Canonicalize the file path and validate to prevent path traversal
+            File canonicalFile = file.getCanonicalFile();
+            File metaInf = new File(canonicalFile, "META-INF");
             if (!metaInf.isDirectory()) {
                 return;
             }
+            // Verify META-INF is actually under the expected base directory
+            if (!metaInf.getCanonicalPath().startsWith(canonicalFile.getCanonicalPath())) {
+                return;
+            }
             foundFileWithoutTld = false;
-            final Path filePath = file.toPath();
+            final Path filePath = canonicalFile.toPath();
             Files.walkFileTree(metaInf.toPath(), new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult visitFile(Path file,
