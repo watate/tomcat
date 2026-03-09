@@ -22,9 +22,6 @@ import java.io.InputStream;
 import java.net.JarURLConnection;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Set;
@@ -192,17 +189,8 @@ public class JarFileUrlJar implements Jar {
         } else {
             String name = entry.getName();
             // Validate entry name to prevent Zip Slip (CodeQL alert #49)
-            if (name != null) {
-                try {
-                    Path entryPath = Paths.get(name).normalize();
-                    if (entryPath.isAbsolute() || entryPath.startsWith("..")) {
-                        return null;
-                    }
-                    // Return normalized path with forward slashes for JAR compatibility
-                    return entryPath.toString().replace('\\', '/');
-                } catch (InvalidPathException e) {
-                    return null;
-                }
+            if (name != null && name.contains("..")) {
+                return null;
             }
             return name;
         }

@@ -19,9 +19,6 @@ package org.apache.tomcat.util.scan;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -97,17 +94,8 @@ public abstract class AbstractInputStreamJar implements Jar {
         } else {
             String name = entry.getName();
             // Validate entry name to prevent Zip Slip (CodeQL alert #48)
-            if (name != null) {
-                try {
-                    Path entryPath = Paths.get(name).normalize();
-                    if (entryPath.isAbsolute() || entryPath.startsWith("..")) {
-                        return null;
-                    }
-                    // Return normalized path with forward slashes for JAR compatibility
-                    return entryPath.toString().replace('\\', '/');
-                } catch (InvalidPathException e) {
-                    return null;
-                }
+            if (name != null && name.contains("..")) {
+                return null;
             }
             return name;
         }
