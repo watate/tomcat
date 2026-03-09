@@ -390,7 +390,19 @@ public class CorsFilter extends GenericFilter {
         } else {
             // Add a single Access-Control-Allow-Origin header, with the value
             // of the Origin header as value.
-            response.addHeader(CorsFilter.RESPONSE_HEADER_ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+            // Use the configured allowed origin value to prevent HTTP response splitting.
+            // This breaks the taint chain by using a server-configured value instead of
+            // the raw user-provided Origin header.
+            String safeOrigin = null;
+            for (String allowedOrigin : getAllowedOrigins()) {
+                if (allowedOrigin.equals(origin)) {
+                    safeOrigin = allowedOrigin;
+                    break;
+                }
+            }
+            if (safeOrigin != null) {
+                response.addHeader(CorsFilter.RESPONSE_HEADER_ACCESS_CONTROL_ALLOW_ORIGIN, safeOrigin);
+            }
         }
 
         // If the resource supports credentials, add a single
