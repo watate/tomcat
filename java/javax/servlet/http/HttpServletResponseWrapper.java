@@ -54,6 +54,18 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void addCookie(Cookie cookie) {
+        if (cookie != null) {
+            String cookieName = cookie.getName();
+            String cookieValue = cookie.getValue();
+            if (cookieName != null && containsCROrLF(cookieName)) {
+                throw new IllegalArgumentException(
+                        "Cookie name must not contain CR or LF characters");
+            }
+            if (cookieValue != null && containsCROrLF(cookieValue)) {
+                throw new IllegalArgumentException(
+                        "Cookie value must not contain CR or LF characters");
+            }
+        }
         this._getHttpServletResponse().addCookie(cookie);
     }
 
@@ -108,7 +120,7 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void sendError(int sc, String msg) throws IOException {
-        this._getHttpServletResponse().sendError(sc, msg);
+        this._getHttpServletResponse().sendError(sc, sanitizeErrorMessage(msg));
     }
 
     /**
@@ -151,6 +163,8 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void setHeader(String name, String value) {
+        validateHeaderArgument("Header name", name);
+        validateHeaderArgument("Header value", value);
         this._getHttpServletResponse().setHeader(name, value);
     }
 
@@ -160,6 +174,8 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
      */
     @Override
     public void addHeader(String name, String value) {
+        validateHeaderArgument("Header name", name);
+        validateHeaderArgument("Header value", value);
         this._getHttpServletResponse().addHeader(name, value);
     }
 
@@ -276,5 +292,60 @@ public class HttpServletResponseWrapper extends ServletResponseWrapper implement
     @Override
     public Supplier<Map<String,String>> getTrailerFields() {
         return this._getHttpServletResponse().getTrailerFields();
+    }
+
+    /**
+     * Check whether the given string contains a carriage return ('\r') or line feed ('\n') character.
+     *
+     * @param value the string to check
+     *
+     * @return {@code true} if the string contains CR or LF
+     */
+    private static boolean containsCROrLF(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\r' || c == '\n') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Validate that a header name or value does not contain CR or LF characters that could enable HTTP response
+     * splitting.
+     *
+     * @param description a description of the argument for use in exception messages
+     * @param value       the value to validate
+     */
+    private static void validateHeaderArgument(String description, String value) {
+        if (value != null && containsCROrLF(value)) {
+            throw new IllegalArgumentException(
+                    description + " must not contain CR or LF characters");
+        }
+    }
+
+    /**
+     * Sanitize an error message so that raw internal details are not exposed to external users. The message is
+     * truncated and any characters that could be used for injection are removed.
+     *
+     * @param msg the raw error message (may be {@code null})
+     *
+     * @return a sanitized message safe for inclusion in an HTTP error response, or {@code null} if the input was
+     *             {@code null}
+     */
+    private static String sanitizeErrorMessage(String msg) {
+        if (msg == null) {
+            return null;
+        }
+        // Strip CR/LF to prevent header injection via error messages
+        StringBuilder sb = new StringBuilder(Math.min(msg.length(), 200));
+        for (int i = 0; i < msg.length() && sb.length() < 200; i++) {
+            char c = msg.charAt(i);
+            if (c != '\r' && c != '\n') {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 }
