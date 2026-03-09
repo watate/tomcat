@@ -340,7 +340,10 @@ public class TldScanner {
                 return;
             }
             // Verify META-INF is actually under the expected base directory
-            if (!metaInf.getCanonicalPath().startsWith(canonicalFile.getCanonicalPath())) {
+            String canonicalBase = canonicalFile.getCanonicalPath();
+            String metaInfCanonical = metaInf.getCanonicalPath();
+            if (!metaInfCanonical.equals(canonicalBase) &&
+                    !metaInfCanonical.startsWith(canonicalBase + File.separator)) {
                 return;
             }
             foundFileWithoutTld = false;

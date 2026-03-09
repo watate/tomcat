@@ -348,18 +348,19 @@ public class JspCServletContext implements ServletContext {
         if (!path.startsWith("/")) {
             return null;
         }
-        // Normalize the path to prevent path traversal
-        String normalizedPath = org.apache.tomcat.util.http.RequestUtil.normalize(path);
-        if (normalizedPath == null) {
-            return null;
-        }
         try {
-            File f = new File(getResource(normalizedPath).toURI());
-            // Validate the canonical path stays within the document root
-            String canonicalPath = f.getCanonicalPath();
+            // Resolve the base directory from the resource base URL
             File baseDir = new File(myResourceBaseURL.toURI());
             String canonicalBase = baseDir.getCanonicalPath();
-            if (!canonicalPath.startsWith(canonicalBase)) {
+
+            // Construct the target file from the base directory and the
+            // relative path (strip leading '/')
+            File f = new File(baseDir, path.substring(1));
+            String canonicalPath = f.getCanonicalPath();
+
+            // Validate the canonical path stays within the document root
+            if (!canonicalPath.equals(canonicalBase) &&
+                    !canonicalPath.startsWith(canonicalBase + File.separator)) {
                 return null;
             }
             return canonicalPath;
