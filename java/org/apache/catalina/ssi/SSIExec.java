@@ -55,6 +55,12 @@ public class SSIExec implements SSICommand {
                     new String[]{"virtual"}, new String[]{substitutedValue},
                     writer);
         } else if (paramName.equalsIgnoreCase("cmd")) {
+            // Validate command to prevent command injection via substituted variables
+            if (!substitutedValue.matches("[\\w \\t./\\-=:@,+%]+")) {
+                ssiMediator.log(sm.getString("ssiExec.executeFailed", substitutedValue));
+                writer.write(configErrMsg);
+                return lastModified;
+            }
             boolean foundProgram = false;
             try {
                 String[] cmdParts = substitutedValue.trim().split("\\s+");
