@@ -20,6 +20,7 @@ package org.apache.catalina.ssi;
 import java.io.PrintWriter;
 
 import org.apache.tomcat.util.res.StringManager;
+import org.apache.tomcat.util.security.Escape;
 /**
  * Return the result associated with the supplied Server Variable.
  *
@@ -60,11 +61,11 @@ public class SSIEcho implements SSICommand {
                 writer.write(ssiMediator.encode(errorMessage, SSIMediator.ENCODING_ENTITY));
             }
         }
-        String variableValue = ssiMediator.getVariableValue(originalValue, encoding);
+        String variableValue = ssiMediator.getVariableValue(originalValue, SSIMediator.ENCODING_NONE);
         if (variableValue == null) {
             variableValue = MISSING_VARIABLE_VALUE;
         }
-        writer.write(variableValue);
+        writer.write(Escape.htmlElementContent(variableValue));
         return System.currentTimeMillis();
     }
 

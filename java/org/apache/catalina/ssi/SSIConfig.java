@@ -20,6 +20,7 @@ package org.apache.catalina.ssi;
 import java.io.PrintWriter;
 
 import org.apache.tomcat.util.res.StringManager;
+import org.apache.tomcat.util.security.Escape;
 /**
  * Implements the Server-side #exec command
  *
@@ -53,7 +54,7 @@ public final class SSIConfig implements SSICommand {
                 // during the
                 // loop
                 String configErrMsg = ssiMediator.getConfigErrMsg();
-                writer.write(configErrMsg);
+                writer.write(Escape.htmlElementContent(configErrMsg));
             }
         }
         // Setting config options doesn't really change the page
