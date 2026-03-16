@@ -795,6 +795,19 @@ public final class CGIServlet extends HttpServlet {
                 this.pathInfo = this.servletPath;
             }
 
+            // Validate pathInfo to prevent path traversal attacks
+            if (this.pathInfo != null) {
+                if (this.pathInfo.indexOf('\0') >= 0) {
+                    return false;
+                }
+                String normalizedCheck = this.pathInfo.replace('\\', '/');
+                for (String segment : normalizedCheck.split("/", -1)) {
+                    if ("..".equals(segment)) {
+                        return false;
+                    }
+                }
+            }
+
             // If the request method is GET, POST or HEAD and the query string
             // does not contain an unencoded "=" this is an indexed query.
             // The parsed query string becomes the command line parameters
@@ -904,7 +917,7 @@ public final class CGIServlet extends HttpServlet {
          */
         protected String[] findCGI(String pathInfo, String webAppRootDir,
                                    String contextPath, String servletPath,
-                                   String cgiPathPrefix) {
+                                   String cgiPathPrefix) throws IOException {
             String path = null;
             String name = null;
             String scriptname = null;
@@ -944,7 +957,13 @@ public final class CGIServlet extends HttpServlet {
                 return new String[] { null, null, null, null };
             }
 
-            path = currentLocation.getAbsolutePath();
+            path = currentLocation.getCanonicalPath();
+            // Validate resolved path stays within the expected CGI root
+            String canonicalRoot = new File(webAppRootDir).getCanonicalPath();
+            if (!path.startsWith(canonicalRoot + File.separator) &&
+                    !path.equals(canonicalRoot)) {
+                return new String[] { null, null, null, null };
+            }
             name = currentLocation.getName();
 
             if (servletPath.startsWith(cginame)) {
@@ -1173,6 +1192,19 @@ public final class CGIServlet extends HttpServlet {
 
             try {
                 File f = new File(destPath.toString());
+                // Validate expanded path stays under tmpDir
+                try {
+                    String canonicalDest = f.getCanonicalPath();
+                    String canonicalTmp = tmpDir.getCanonicalPath();
+                    if (!canonicalDest.startsWith(canonicalTmp + File.separator) &&
+                            !canonicalDest.equals(canonicalTmp)) {
+                        log.warn(sm.getString("cgiServlet.expandNotFound", srcPath));
+                        return;
+                    }
+                } catch (IOException ioe) {
+                    log.warn(sm.getString("cgiServlet.expandFail", srcPath, destPath), ioe);
+                    return;
+                }
                 if (f.exists()) {
                     // Don't need to expand if it already exists
                     return;
@@ -1607,7 +1639,6 @@ public final class CGIServlet extends HttpServlet {
              * http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=4216884
              * with major modifications by Martin Dengler
              */
-            Runtime rt = null;
             BufferedReader cgiHeaderReader = null;
             InputStream cgiOutput = null;
             BufferedReader commandsStdErr = null;
@@ -1627,10 +1658,13 @@ public final class CGIServlet extends HttpServlet {
             cmdAndArgs.addAll(params);
 
             try {
-                rt = Runtime.getRuntime();
-                proc = rt.exec(
-                        cmdAndArgs.toArray(new String[0]),
-                        hashToStringArray(env), wd);
+                ProcessBuilder pb = new ProcessBuilder(cmdAndArgs);
+                pb.directory(wd);
+                pb.environment().clear();
+                for (Entry<String, String> entry : env.entrySet()) {
+                    pb.environment().put(entry.getKey(), entry.getValue());
+                }
+                proc = pb.start();
 
                 String sContentLength = env.get("CONTENT_LENGTH");
 

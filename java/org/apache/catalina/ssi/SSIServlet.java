@@ -169,9 +169,20 @@ public class SSIServlet extends HttpServlet {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
+        // Validate path to prevent path traversal
+        if (path.indexOf('\0') >= 0 || path.contains("..")) {
+            res.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
         URL resource = servletContext.getResource(path);
         if (resource == null) {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+        // Validate URL protocol to prevent SSRF
+        String protocol = resource.getProtocol();
+        if (!"file".equals(protocol) && !"jndi".equals(protocol) && !"jar".equals(protocol)) {
+            res.sendError(HttpServletResponse.SC_FORBIDDEN);
             return;
         }
         String resourceMimeType = servletContext.getMimeType(path);
