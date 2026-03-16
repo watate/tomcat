@@ -57,8 +57,9 @@ public class SSIExec implements SSICommand {
         } else if (paramName.equalsIgnoreCase("cmd")) {
             boolean foundProgram = false;
             try {
-                Runtime rt = Runtime.getRuntime();
-                Process proc = rt.exec(substitutedValue);
+                String[] cmdParts = substitutedValue.trim().split("\\s+");
+                ProcessBuilder pb = new ProcessBuilder(cmdParts);
+                Process proc = pb.start();
                 foundProgram = true;
                 BufferedReader stdOutReader = new BufferedReader(
                         new InputStreamReader(proc.getInputStream()));
