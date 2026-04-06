@@ -374,6 +374,13 @@ public class DiskFileItem
      */
     @Override
     public void write(final File file) throws Exception {
+        // Validate the destination path to prevent path traversal attacks.
+        // Reject any path that contains ".." components.
+        if (file.getPath().contains("..")) {
+            throw new FileUploadException(
+                    "Path traversal is not allowed in the destination file path");
+        }
+
         if (isInMemory()) {
             try (OutputStream fout = Files.newOutputStream(file.toPath())) {
                 fout.write(get());
