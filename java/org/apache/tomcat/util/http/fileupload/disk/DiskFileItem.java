@@ -374,11 +374,15 @@ public class DiskFileItem
      */
     @Override
     public void write(final File file) throws Exception {
-        // Validate and normalize the destination path to prevent path traversal
-        final File destFile = validateDestPath(file);
+        // Validate the destination path to prevent path traversal attacks.
+        // Reject any path that contains ".." components.
+        if (file.getPath().contains("..")) {
+            throw new FileUploadException(
+                    "Path traversal is not allowed in the destination file path");
+        }
 
         if (isInMemory()) {
-            try (OutputStream fout = Files.newOutputStream(destFile.toPath())) {
+            try (OutputStream fout = Files.newOutputStream(file.toPath())) {
                 fout.write(get());
             } catch (final IOException e) {
                 throw new IOException("Unexpected output data");
@@ -400,16 +404,16 @@ public class DiskFileItem
              * in a temporary location so move it to the
              * desired file.
              */
-            if (destFile.exists() && !destFile.delete()) {
+            if (file.exists() && !file.delete()) {
                 throw new FileUploadException(
                         "Cannot write uploaded file to disk!");
             }
-            if (!outputFile.renameTo(destFile)) {
+            if (!outputFile.renameTo(file)) {
                 BufferedInputStream in = null;
                 BufferedOutputStream out = null;
                 try {
                     in = new BufferedInputStream(new FileInputStream(outputFile));
-                    out = new BufferedOutputStream(new FileOutputStream(destFile));
+                    out = new BufferedOutputStream(new FileOutputStream(file));
                     IOUtils.copy(in, out);
                     out.close();
                 } finally {
@@ -418,27 +422,6 @@ public class DiskFileItem
                 }
             }
         }
-    }
-
-    /**
-     * Validates and normalizes a destination file path to prevent path
-     * traversal attacks. The path is checked for ".." components and then
-     * resolved to its canonical form.
-     *
-     * @param file The file path to validate.
-     *
-     * @return The canonical (normalized) File.
-     *
-     * @throws IOException if an I/O error occurs during canonicalization.
-     * @throws FileUploadException if path traversal is detected.
-     */
-    private static File validateDestPath(final File file) throws IOException, FileUploadException {
-        final String path = file.getPath();
-        if (path.contains("..")) {
-            throw new FileUploadException(
-                    "Path traversal is not allowed in the destination file path");
-        }
-        return file.getCanonicalFile();
     }
 
     /**
