@@ -389,7 +389,12 @@ public class StandardJarScanner implements JarScanner {
         } else if ("file".equals(url.getProtocol())) {
             File f;
             try {
-                f = new File(url.toURI());
+                // Validate the URL path to prevent path traversal attacks
+                String urlPath = url.getPath();
+                if (urlPath != null && urlPath.contains("..")) {
+                    throw new IOException("Path traversal detected in classpath URL: " + url);
+                }
+                f = new File(url.toURI()).getCanonicalFile();
                 if (f.isFile() && isScanAllFiles()) {
                     // Treat this file as a JAR
                     URL jarURL = UriUtil.buildJarUrl(f);
@@ -403,7 +408,7 @@ public class StandardJarScanner implements JarScanner {
                     if (scanType == JarScanType.PLUGGABILITY) {
                         callback.scan(f, webappPath, isWebapp);
                     } else {
-                        File metainf = new File(f.getAbsoluteFile() + File.separator + "META-INF");
+                        File metainf = new File(f, "META-INF").getCanonicalFile();
                         if (metainf.isDirectory()) {
                             callback.scan(f, webappPath, isWebapp);
                         }
