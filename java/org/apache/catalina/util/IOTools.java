@@ -48,7 +48,12 @@ public class IOTools {
         throws IOException {
         int numRead;
         while ( (numRead = reader.read(buf) ) >= 0) {
-            writer.write(buf, 0, numRead);
+            // CodeQL suppression: This is a generic I/O copy utility (Reader→Writer) used
+            // for serving static resources, copying streams, etc. Applying output encoding
+            // here would corrupt all content passing through (static files, binary data,
+            // already-encoded responses). XSS prevention is the responsibility of callers
+            // that handle user-supplied content destined for HTML contexts.
+            writer.write(buf, 0, numRead); // lgtm[java/xss]
         }
     }
 

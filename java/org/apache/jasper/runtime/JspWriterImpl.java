@@ -314,7 +314,11 @@ public class JspWriterImpl extends JspWriter {
         ensureOpen();
         if (bufferSize == 0) {
             initOut();
-            out.write(s, off, len);
+            // CodeQL suppression: This is the core JSP unbuffered write path. Encoding
+            // here would HTML-escape ALL JSP output including structural HTML tags,
+            // breaking every JSP page. XSS prevention must be applied at the application
+            // layer (e.g., JSTL <c:out>, fn:escapeXml) before content reaches this writer.
+            out.write(s, off, len); // lgtm[java/xss]
             return;
         }
         int b = off, t = off + len;
