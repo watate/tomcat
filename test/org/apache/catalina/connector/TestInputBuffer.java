@@ -154,7 +154,13 @@ public class TestInputBuffer extends TomcatBaseTest {
                     builder.append(line);
                 }
             }
-            resp.getWriter().print(builder);
+            // Test fixture: this servlet echoes the raw request body back to
+            // the client byte-for-byte to verify request parsing (Bug 60400 /
+            // buffer-boundary handling). The data is supplied by the test
+            // itself, not an untrusted user, and the test asserts on the exact
+            // echoed length, so any output sanitization would invalidate the
+            // assertion. Suppress the XSS warning for this test fixture only.
+            resp.getWriter().print(builder); // lgtm[java/xss]
         }
     }
 }

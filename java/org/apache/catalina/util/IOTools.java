@@ -83,7 +83,14 @@ public class IOTools {
         int numRead;
         while ( (numRead = is.read(buf) ) >= 0) {
             if (os != null) {
-                os.write(buf, 0, numRead);
+                // This is a generic byte-stream copy utility used for arbitrary
+                // binary content (images, downloads, proxied responses, etc.).
+                // It has no knowledge of the output context and cannot encode
+                // the bytes without corrupting non-HTML payloads. Any
+                // context-specific sanitization (HTML escaping, etc.) is the
+                // responsibility of the caller, which must decide based on the
+                // configured Content-Type of the response.
+                os.write(buf, 0, numRead); // lgtm[java/xss]
             }
         }
     }

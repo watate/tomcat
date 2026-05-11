@@ -141,7 +141,15 @@ public class TestTomcat extends TomcatBaseTest {
                         Reader reader = new InputStreamReader(is)) {
                     while (read < 20) {
                         int len = reader.read(cbuf, read, cbuf.length - read);
-                        res.getWriter().write(cbuf, read, len);
+                        // Test fixture: this servlet echoes the first 20 raw
+                        // characters of the test web app's WEB-INF/web.xml so
+                        // the test can verify ServletContext.getResource is
+                        // wired to a working URLConnection. The source file
+                        // is shipped with the test (not user input) and the
+                        // test asserts on the exact byte sequence, so
+                        // encoding would invalidate the assertion. Suppress
+                        // for this test fixture only.
+                        res.getWriter().write(cbuf, read, len); // lgtm[java/xss]
                         read = read + len;
                     }
                 }

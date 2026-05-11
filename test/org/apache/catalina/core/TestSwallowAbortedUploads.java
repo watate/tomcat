@@ -218,7 +218,14 @@ public class TestSwallowAbortedUploads extends TomcatBaseTest {
                 sb.append(ex);
                 resp.setStatus(500);
             }
-            out.print(sb.toString());
+            // Test fixture: this servlet echoes back diagnostic information
+            // about the multipart parts it received (counts, names, sizes,
+            // and exception details) so the test can assert behavior under
+            // aborted uploads. The data is derived from test-controlled
+            // multipart requests, the response is text/plain, and the test
+            // does not interpret the body as HTML. Suppress the XSS warning
+            // for this test fixture only.
+            out.print(sb.toString()); // lgtm[java/xss]
             resp.flushBuffer();
         }
 

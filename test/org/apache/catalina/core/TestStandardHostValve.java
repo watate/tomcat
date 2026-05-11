@@ -221,7 +221,14 @@ public class TestStandardHostValve extends TomcatBaseTest {
                 throws ServletException, IOException {
             String pathInfo = req.getPathInfo();
             resp.setContentType("text/plain");
-            resp.getWriter().print(pathInfo);
+            // Test fixture: this servlet is used as the error-page target and
+            // echoes back the path info ("/500", "/default", etc.) so the test
+            // can assert the correct error page was invoked. The path info is
+            // determined by error-page configuration set up by the test
+            // itself, not an untrusted user, and the response is text/plain.
+            // The test asserts the exact echoed value, so HTML-encoding would
+            // alter it. Suppress for this test fixture only.
+            resp.getWriter().print(pathInfo); // lgtm[java/xss]
         }
     }
 }
