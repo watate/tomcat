@@ -108,7 +108,7 @@ public class TestNamingContext extends TomcatBaseTest {
                     out.print("NOTEQUAL");
                 }
             } catch (NamingException ne) {
-                ne.printStackTrace(out);
+                throw new ServletException(ne);
             }
         }
     }
@@ -159,7 +159,7 @@ public class TestNamingContext extends TomcatBaseTest {
                     out.print(b.getObject().getClass().getName());
                 }
             } catch (NamingException ne) {
-                ne.printStackTrace(out);
+                throw new ServletException(ne);
             }
         }
     }
@@ -208,7 +208,7 @@ public class TestNamingContext extends TomcatBaseTest {
                 TesterObject to = (TesterObject) obj;
                 out.print(to.getFoo());
             } catch (NamingException ne) {
-                ne.printStackTrace(out);
+                throw new ServletException(ne);
             }
         }
     }
@@ -276,7 +276,7 @@ public class TestNamingContext extends TomcatBaseTest {
                     out.print(ERROR_MESSAGE);
                 }
             } catch (NamingException ne) {
-                ne.printStackTrace(out);
+                throw new ServletException(ne);
             }
         }
     }
