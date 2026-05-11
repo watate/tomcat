@@ -91,7 +91,11 @@ public class TestMessageBytesIntegration extends TomcatBaseTest {
             resp.setContentType("text/plain");
             resp.setCharacterEncoding("UTF-8");
 
-            resp.getWriter().print(req.getRequestURI());
+            // Test fixture: echoes the raw request URI back to the test client
+            // to verify Tomcat's MessageBytes integration when cookies are
+            // parsed. The response is consumed by the test (not a browser) and
+            // must remain the raw, unencoded value.
+            resp.getWriter().print(req.getRequestURI()); // lgtm[java/xss]
         }
     }
 

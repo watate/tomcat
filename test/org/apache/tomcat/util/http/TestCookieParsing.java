@@ -314,8 +314,12 @@ public class TestCookieParsing extends TomcatBaseTest {
             Cookie cookies[] = req.getCookies();
             if (cookies != null) {
                 for (Cookie cookie : cookies) {
+                    // Test fixture: echoes parsed cookie name/value pairs back
+                    // to the test client so the test can verify Tomcat's cookie
+                    // parsing. The response is consumed by the test (not a
+                    // browser) and must remain the raw, unencoded value.
                     resp.getWriter().write(cookie.getName() + "=" +
-                            cookie.getValue());
+                            cookie.getValue()); // lgtm[java/xss]
                 }
             }
             resp.flushBuffer();
@@ -332,10 +336,14 @@ public class TestCookieParsing extends TomcatBaseTest {
         throws ServletException, IOException {
             req.getCookies();
             // Never do this in production code. It triggers an XSS.
+            // Test fixture: echoes raw Cookie header back to the test client so
+            // the test can verify Tomcat's cookie header preservation. The
+            // response is consumed by the test (not a browser) and must remain
+            // the raw, unencoded value.
             Enumeration<String> cookieHeaders = req.getHeaders("Cookie");
             while (cookieHeaders.hasMoreElements()) {
                 String cookieHeader = cookieHeaders.nextElement();
-                resp.getWriter().write(cookieHeader);
+                resp.getWriter().write(cookieHeader); // lgtm[java/xss]
             }
             resp.flushBuffer();
         }
