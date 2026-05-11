@@ -245,10 +245,39 @@ public class TestStandardContextResources extends TomcatBaseTest {
 
             ServletContext context = getServletContext();
 
+            /*
+             * The supplied path must be a relative resource path inside the
+             * web application: reject absolute URLs and any path containing
+             * parent-directory traversal segments. Without these checks an
+             * attacker-controllable parameter would allow opening arbitrary
+             * URLs (CodeQL java/ssrf) or escaping the web application's
+             * resource root (CodeQL java/path-injection).
+             */
+            String requestedPath = req.getParameter("path");
+            if (requestedPath == null || !requestedPath.startsWith("/") ||
+                    requestedPath.contains("..") || requestedPath.contains(":")) {
+                resp.sendError(HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+
             // Check resources individually
-            URL url = context.getResource(req.getParameter("path"));
+            URL url = context.getResource(requestedPath);
             if (url == null) {
                 resp.getWriter().println("Not found");
+                return;
+            }
+
+            /*
+             * ServletContext.getResource() returns a URL that can use a
+             * variety of schemes depending on how the web application is
+             * deployed (file:, jar:, jndi:, war:). Constrain the schemes we
+             * are willing to open to those that resolve to web application
+             * resources to prevent opening arbitrary URLs.
+             */
+            String scheme = url.getProtocol();
+            if (scheme == null || !ALLOWED_RESOURCE_SCHEMES.contains(
+                    scheme.toLowerCase(java.util.Locale.ENGLISH))) {
+                resp.sendError(HttpServletResponse.SC_BAD_REQUEST);
                 return;
             }
 
@@ -256,6 +285,16 @@ public class TestStandardContextResources extends TomcatBaseTest {
                     OutputStream output = resp.getOutputStream()) {
                 IOTools.flow(input, output);
             }
+        }
+
+        private static final java.util.Set<String> ALLOWED_RESOURCE_SCHEMES;
+        static {
+            java.util.Set<String> schemes = new java.util.HashSet<>();
+            schemes.add("file");
+            schemes.add("jar");
+            schemes.add("jndi");
+            schemes.add("war");
+            ALLOWED_RESOURCE_SCHEMES = java.util.Collections.unmodifiableSet(schemes);
         }
     }
 

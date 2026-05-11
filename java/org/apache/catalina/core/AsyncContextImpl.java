@@ -164,7 +164,13 @@ public class AsyncContextImpl implements AsyncContext, AsyncContextCallback {
         if (!context.getDispatchersUseEncodedPaths()) {
             path = UDecoder.URLDecode(path, StandardCharsets.UTF_8);
         }
-        dispatch(path);
+        /*
+         * The path was derived from the request URI which has already been
+         * parsed by the connector, so it does not need the same
+         * absolute-URL/protocol-relative validation that user-supplied paths
+         * receive via dispatch(String) and dispatch(ServletContext, String).
+         */
+        dispatchInternal(getRequest().getServletContext(), path);
     }
 
     @Override
@@ -175,6 +181,16 @@ public class AsyncContextImpl implements AsyncContext, AsyncContextCallback {
 
     @Override
     public void dispatch(ServletContext servletContext, String path) {
+        /*
+         * Reject absolute URLs and protocol-relative URLs so an
+         * attacker-controlled value cannot forward the request outside the
+         * current servlet context (CodeQL java/unvalidated-url-forward).
+         */
+        validateDispatchPath(path);
+        dispatchInternal(servletContext, path);
+    }
+
+    private void dispatchInternal(ServletContext servletContext, String path) {
         synchronized (asyncContextLock) {
             if (log.isDebugEnabled()) {
                 logDebug("dispatch   ");
@@ -497,6 +513,39 @@ public class AsyncContextImpl implements AsyncContext, AsyncContextCallback {
         if (request == null) {
             // AsyncContext has been recycled and should not be being used
             throw new IllegalStateException(sm.getString("asyncContextImpl.requestEnded"));
+        }
+    }
+
+    /*
+     * Validate that the dispatch path is a relative path that can only resolve
+     * within the current ServletContext. Reject absolute URLs (which would
+     * indicate an attempt to forward to an arbitrary external host) and
+     * protocol-relative URLs (which target arbitrary hosts via the current
+     * scheme). Parent-directory traversal segments (".." / "/../") are left
+     * for Tomcat's request-dispatcher path normalization, which already
+     * constrains forwards to the current servlet context and cannot escape
+     * it. See CodeQL rule java/unvalidated-url-forward.
+     */
+    private void validateDispatchPath(String path) {
+        if (path == null) {
+            throw new IllegalArgumentException(sm.getString("asyncContextImpl.dispatch.invalidPath", "null"));
+        }
+        // Reject absolute URLs of the form scheme://host/... A scheme must
+        // appear before any '/' (a ':' after a '/' is just a path segment
+        // containing a colon).
+        int colonIndex = path.indexOf(':');
+        if (colonIndex > 0) {
+            int slashIndex = path.indexOf('/');
+            if (slashIndex < 0 || colonIndex < slashIndex) {
+                throw new IllegalArgumentException(
+                        sm.getString("asyncContextImpl.dispatch.invalidPath", path));
+            }
+        }
+        // Protocol-relative URLs (//host/...) are also disallowed because
+        // they target an arbitrary host using the current scheme.
+        if (path.startsWith("//")) {
+            throw new IllegalArgumentException(
+                    sm.getString("asyncContextImpl.dispatch.invalidPath", path));
         }
     }
 
