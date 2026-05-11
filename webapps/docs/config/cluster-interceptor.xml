@@ -226,7 +226,9 @@
        The length of the key will specify the flavor of the encryption algorithm
        to be used, if applicable (e.g. AES-128 versus AES-256).
 
-       The default algorithm is <code>AES/CBC/PKCS5Padding</code>.
+       The default algorithm is <code>AES/GCM/NoPadding</code>, which provides
+      authenticated encryption. ECB is not supported because it does not
+      provide semantic security.
      </attribute>
      <attribute name="encryptionKey" required="true">
        The key to be used with the encryption algorithm.
