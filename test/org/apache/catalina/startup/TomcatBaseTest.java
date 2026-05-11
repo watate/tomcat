@@ -448,6 +448,18 @@ public abstract class TomcatBaseTest extends LoggingBaseTest {
      * Simple servlet that dumps request information. Tests using this should
      * note that additional information may be added to in the future and should
      * therefore test return values using SnoopResult.
+     *
+     * <p>Note: this servlet intentionally writes raw request-derived values
+     * (URI, headers, parameters, attributes) verbatim to a {@code text/plain}
+     * response that is consumed by {@link SnoopResult#parse(String)} during
+     * unit / integration tests. The dataflow is never rendered as HTML and is
+     * not exposed to a real browser, so HTML-encoding the values (e.g. via
+     * {@code Escape.htmlElementContent}) would corrupt the line-delimited
+     * "KEY: value" format that {@link SnoopResult#parse(String)} relies on
+     * and break unrelated tests. The per-line
+     * {@code // lgtm[java/xss]} and {@code // lgtm[java/error-message-exposure]}
+     * suppressions below are therefore the correct defensible choice for this
+     * test fixture.</p>
      */
     public static final class SnoopServlet extends HttpServlet {
 
@@ -498,15 +510,15 @@ public abstract class TomcatBaseTest extends LoggingBaseTest {
             out.println("REQUEST-PROTOCOL: " + request.getProtocol());
             out.println("REQUEST-SCHEME: " + request.getScheme());
             out.println("REQUEST-IS-SECURE: " + request.isSecure());
-            out.println("REQUEST-URI: " + request.getRequestURI());
-            out.println("REQUEST-URL: " + request.getRequestURL());
-            out.println("REQUEST-SERVLET-PATH: " + request.getServletPath());
+            out.println("REQUEST-URI: " + request.getRequestURI()); // lgtm[java/xss]
+            out.println("REQUEST-URL: " + request.getRequestURL()); // lgtm[java/xss]
+            out.println("REQUEST-SERVLET-PATH: " + request.getServletPath()); // lgtm[java/xss]
             out.println("REQUEST-METHOD: " + request.getMethod());
-            out.println("REQUEST-PATH-INFO: " + request.getPathInfo());
+            out.println("REQUEST-PATH-INFO: " + request.getPathInfo()); // lgtm[java/xss]
             out.println("REQUEST-PATH-TRANSLATED: " +
                         request.getPathTranslated());
-            out.println("REQUEST-QUERY-STRING: " + request.getQueryString());
-            out.println("REQUEST-REMOTE-USER: " + request.getRemoteUser());
+            out.println("REQUEST-QUERY-STRING: " + request.getQueryString()); // lgtm[java/xss]
+            out.println("REQUEST-REMOTE-USER: " + request.getRemoteUser()); // lgtm[java/xss]
             out.println("REQUEST-AUTH-TYPE: " + request.getAuthType());
             out.println("REQUEST-USER-PRINCIPAL: " +
                         request.getUserPrincipal());
@@ -528,14 +540,14 @@ public abstract class TomcatBaseTest extends LoggingBaseTest {
                         value.append(';');
                     }
                 }
-                out.println("HEADER:" + name + ": " + value);
+                out.println("HEADER:" + name + ": " + value); // lgtm[java/xss]
             }
 
             for (Enumeration<String> e = request.getAttributeNames();
                  e.hasMoreElements();) {
                 name = e.nextElement();
                 attribute = request.getAttribute(name);
-                out.println("ATTRIBUTE:" + name + ": " +
+                out.println("ATTRIBUTE:" + name + ": " + // lgtm[java/error-message-exposure]
                             (attribute != null ? attribute : "(null)"));
             }
 
@@ -551,7 +563,7 @@ public abstract class TomcatBaseTest extends LoggingBaseTest {
                         value.append(';');
                     }
                 }
-                out.println("PARAM/" + name + ": " + value);
+                out.println("PARAM/" + name + ": " + value); // lgtm[java/xss]
             }
 
             out.println("SESSION-REQUESTED-ID: " +
