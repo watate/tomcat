@@ -23,7 +23,7 @@ import org.junit.Test;
 
 public class TestSecretKeyCredentialHandler {
 
-    private static final String[] ALGORITHMS = { "PBKDF2WithHmacSHA1", "PBEWithMD5AndDES" };
+    private static final String[] ALGORITHMS = { "PBKDF2WithHmacSHA1", "PBKDF2WithHmacSHA256" };
     private static final String[] PASSWORDS = { "password", "$!&#%!%@$#@*^$%&%%#!!*%$%&#@!^" };
     private static final int[] KEYLENGTHS = { 8, 111, 256 };
     private static final int[] SALTLENGTHS = { 1, 7, 12, 20 };
@@ -42,6 +42,12 @@ public class TestSecretKeyCredentialHandler {
                 }
             }
         }
+    }
+
+    @Test(expected = NoSuchAlgorithmException.class)
+    public void testWeakAlgorithmRejected() throws NoSuchAlgorithmException {
+        SecretKeyCredentialHandler handler = new SecretKeyCredentialHandler();
+        handler.setAlgorithm("PBEWithMD5AndDES");
     }
 
     @Test

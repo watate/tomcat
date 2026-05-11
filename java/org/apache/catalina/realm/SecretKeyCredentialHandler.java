@@ -19,6 +19,10 @@ package org.apache.catalina.realm;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -34,6 +38,25 @@ public class SecretKeyCredentialHandler extends DigestCredentialHandlerBase {
     public static final String DEFAULT_ALGORITHM = "PBKDF2WithHmacSHA1";
     public static final int DEFAULT_KEY_LENGTH = 160;
     public static final int DEFAULT_ITERATIONS = 20000;
+
+    /*
+     * Allowlist of password-based key derivation algorithms that are considered
+     * safe for credential hashing. PBKDF2 with HMAC-SHA1/224/256/384/512 is
+     * accepted because PBKDF2 with a strong iteration count remains an
+     * acceptable KDF. Legacy algorithms such as PBEWithMD5AndDES are rejected
+     * because they rely on broken primitives (MD5, DES) and are flagged by
+     * security tooling (CodeQL java/weak-cryptographic-algorithm).
+     */
+    private static final Set<String> ALLOWED_ALGORITHMS;
+    static {
+        Set<String> allowed = new HashSet<>();
+        allowed.add("PBKDF2WITHHMACSHA1");
+        allowed.add("PBKDF2WITHHMACSHA224");
+        allowed.add("PBKDF2WITHHMACSHA256");
+        allowed.add("PBKDF2WITHHMACSHA384");
+        allowed.add("PBKDF2WITHHMACSHA512");
+        ALLOWED_ALGORITHMS = Collections.unmodifiableSet(allowed);
+    }
 
 
     private SecretKeyFactory secretKeyFactory;
@@ -53,6 +76,11 @@ public class SecretKeyCredentialHandler extends DigestCredentialHandlerBase {
 
     @Override
     public void setAlgorithm(String algorithm) throws NoSuchAlgorithmException {
+        if (algorithm == null ||
+                !ALLOWED_ALGORITHMS.contains(algorithm.toUpperCase(Locale.ENGLISH))) {
+            throw new NoSuchAlgorithmException(
+                    sm.getString("pbeCredentialHandler.invalidAlgorithm", algorithm));
+        }
         SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(algorithm);
         this.secretKeyFactory = secretKeyFactory;
     }
