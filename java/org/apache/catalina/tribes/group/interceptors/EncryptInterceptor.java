@@ -58,7 +58,7 @@ public class EncryptInterceptor extends ChannelInterceptorBase implements Encryp
     private static final Log log = LogFactory.getLog(EncryptInterceptor.class);
     protected static final StringManager sm = StringManager.getManager(EncryptInterceptor.class);
 
-    private static final String DEFAULT_ENCRYPTION_ALGORITHM = "AES/CBC/PKCS5Padding";
+    private static final String DEFAULT_ENCRYPTION_ALGORITHM = "AES/GCM/NoPadding";
 
     private String providerName;
     private String encryptionAlgorithm = DEFAULT_ENCRYPTION_ALGORITHM;
@@ -158,7 +158,10 @@ public class EncryptInterceptor extends ChannelInterceptorBase implements Encryp
      * <a href="https://docs.oracle.com/javase/8/docs/technotes/guides/security/StandardNames.html">Java
      * documentation</a>.
      *
-     * Default is <code>AES/CBC/PKCS5Padding</code>.
+     * Default is <code>AES/GCM/NoPadding</code>.
+     *
+     * <p>For security reasons, ECB block cipher mode (which does not provide
+     * semantic security) is rejected at configuration time.</p>
      *
      * @param algorithm The algorithm to use.
      */
@@ -177,7 +180,45 @@ public class EncryptInterceptor extends ChannelInterceptorBase implements Encryp
             throw new IllegalArgumentException(sm.getString("encryptInterceptor.algorithm.required"));
         }
 
+        String algorithmMode = parseAlgorithmMode(algorithm);
+        if (!isAllowedMode(algorithmMode)) {
+            throw new IllegalArgumentException(
+                    sm.getString("encryptInterceptor.algorithm.unsupported-mode", algorithmMode));
+        }
+
         encryptionAlgorithm = algorithm;
+    }
+
+    /**
+     * Extracts the block cipher mode portion (between the first two
+     * <code>/</code> separators) from a fully-qualified JCA algorithm string
+     * such as <code>AES/GCM/NoPadding</code>. Returns the empty string when
+     * the input is not fully qualified.
+     */
+    private static String parseAlgorithmMode(String algorithm) {
+        int firstSlash = algorithm.indexOf('/');
+        if (firstSlash < 0) {
+            return "";
+        }
+        int secondSlash = algorithm.indexOf('/', firstSlash + 1);
+        if (secondSlash < 0) {
+            return "";
+        }
+        return algorithm.substring(firstSlash + 1, secondSlash);
+    }
+
+    /**
+     * Returns true if the supplied block cipher mode is part of the
+     * supported allowlist. ECB and other insecure or unsupported modes are
+     * rejected. This allowlist is used both at configuration time (see
+     * {@link #setEncryptionAlgorithm(String)}) and immediately before any
+     * {@link Cipher} or {@link SecretKeySpec} instance is created.
+     */
+    private static boolean isAllowedMode(String algorithmMode) {
+        return "GCM".equalsIgnoreCase(algorithmMode)
+                || "CBC".equalsIgnoreCase(algorithmMode)
+                || "OFB".equalsIgnoreCase(algorithmMode)
+                || "CFB".equalsIgnoreCase(algorithmMode);
     }
 
     /**
@@ -329,7 +370,7 @@ public class EncryptInterceptor extends ChannelInterceptorBase implements Encryp
         String algorithmName;
         String algorithmMode;
 
-        // We need to break-apart the algorithm name e.g. AES/CBC/PKCS5Padding
+        // We need to break-apart the algorithm name e.g. AES/GCM/NoPadding
         // take just the algorithm part.
         int pos = algorithm.indexOf('/');
 
@@ -347,22 +388,28 @@ public class EncryptInterceptor extends ChannelInterceptorBase implements Encryp
             algorithmMode = "CBC";
         }
 
+        // Defense-in-depth: enforce the mode allowlist here as well so that
+        // ECB and other insecure / unsupported modes can never reach the JCE
+        // Cipher initialization below, regardless of how this manager was
+        // configured.
+        if (!isAllowedMode(algorithmMode)) {
+            throw new IllegalArgumentException(
+                    sm.getString("encryptInterceptor.algorithm.unsupported-mode", algorithmMode));
+        }
+
         if("GCM".equalsIgnoreCase(algorithmMode)) {
             return new GCMEncryptionManager(algorithm, new SecretKeySpec(encryptionKey, algorithmName), providerName);
-        } else if("CBC".equalsIgnoreCase(algorithmMode)
-                || "OFB".equalsIgnoreCase(algorithmMode)
-                || "CFB".equalsIgnoreCase(algorithmMode)) {
+        } else {
+            // CBC / OFB / CFB. ECB is rejected above by isAllowedMode().
             return new BaseEncryptionManager(algorithm,
                     new SecretKeySpec(encryptionKey, algorithmName),
                     providerName);
-        } else {
-            throw new IllegalArgumentException(sm.getString("encryptInterceptor.algorithm.unsupported-mode", algorithmMode));
         }
     }
 
     private static class BaseEncryptionManager {
         /**
-         * The fully-specified algorithm e.g. AES/CBC/PKCS5Padding.
+         * The fully-specified algorithm e.g. AES/GCM/NoPadding.
          */
         private final String algorithm;
 
