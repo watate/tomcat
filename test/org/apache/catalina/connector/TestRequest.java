@@ -148,7 +148,10 @@ public class TestRequest extends TomcatBaseTest {
             Enumeration<String> names = req.getParameterNames();
             while (names.hasMoreElements()) {
                 String name = names.nextElement();
-                out.println(name + "=" + req.getParameter(name));
+                // Test fixture: echoes parsed parameter names/values as text/plain so the
+                // test can verify Tomcat's parameter parsing. The response is not HTML,
+                // so HTML-encoding would break the exact-string assertions in the test.
+                out.println(name + "=" + req.getParameter(name)); // lgtm[java/xss]
             }
         }
     }
@@ -302,7 +305,10 @@ public class TestRequest extends TomcatBaseTest {
                 throws ServletException, IOException {
             resp.setContentType("text/plain");
             PrintWriter pw = resp.getWriter();
-            pw.print("QueryString=" + req.getQueryString());
+            // Test fixture: echoes the raw query string as text/plain so the test can
+            // verify Tomcat's query-string handling. The response is not HTML, so
+            // HTML-encoding would break the exact-string assertions in the test.
+            pw.print("QueryString=" + req.getQueryString()); // lgtm[java/xss]
         }
     }
 
@@ -540,7 +546,10 @@ public class TestRequest extends TomcatBaseTest {
                       out.print(",");
                     }
 
-                    out.print(name + "=" + value);
+                    // Test fixture: echoes parsed parameter name/value pairs as text/plain
+                    // so the test can verify Tomcat's parameter parsing. The response is
+                    // not HTML, so HTML-encoding would break the exact-string assertions.
+                    out.print(name + "=" + value); // lgtm[java/xss]
                 }
             }
         }
@@ -658,7 +667,10 @@ public class TestRequest extends TomcatBaseTest {
             resp.setContentType("text/plain");
             resp.setCharacterEncoding("UTF-8");
 
-            resp.getWriter().println("Part " + req.getParameter("part"));
+            // Test fixture: echoes the multipart "part" parameter as text/plain so the
+            // test can verify multipart parsing and request character encoding. The
+            // response is not HTML, so HTML-encoding would break the test assertions.
+            resp.getWriter().println("Part " + req.getParameter("part")); // lgtm[java/xss]
         }
     }
 
