@@ -314,7 +314,11 @@ public class TestSsl extends TomcatBaseTest {
             byte[] out = baos.toByteArray();
             // Set the content-length to avoid having to parse chunked
             resp.setContentLength(out.length);
-            resp.getOutputStream().write(out);
+            // Test fixture: echoes the raw POST body bytes back to the test
+            // client (over a binary OutputStream, not text) so the test can
+            // verify SSL/TLS data integrity. The response is consumed by the
+            // test (not a browser) and must remain the raw, unencoded bytes.
+            resp.getOutputStream().write(out); // lgtm[java/xss]
         }
 
     }

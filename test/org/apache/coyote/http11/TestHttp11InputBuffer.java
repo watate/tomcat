@@ -119,7 +119,11 @@ public class TestHttp11InputBuffer extends TomcatBaseTest {
 
             Enumeration<String> values = req.getHeaders("X-Bug48839");
             while (values.hasMoreElements()) {
-                out.println(values.nextElement());
+                // Test fixture: echoes the raw request header value back to the
+                // test client so the test can verify Tomcat's header parsing.
+                // The response is consumed by the test (not a browser) and
+                // must remain the raw, unencoded value.
+                out.println(values.nextElement()); // lgtm[java/xss]
             }
         }
     }
@@ -379,7 +383,11 @@ public class TestHttp11InputBuffer extends TomcatBaseTest {
         private void processHeaders(String header, HttpServletRequest req, PrintWriter out) {
             Enumeration<String> values = req.getHeaders(header);
             while (values.hasMoreElements()) {
-                out.println(values.nextElement());
+                // Test fixture: echoes the raw request header value back to the
+                // test client so the test can verify Tomcat's header parsing.
+                // The response is consumed by the test (not a browser) and
+                // must remain the raw, unencoded value.
+                out.println(values.nextElement()); // lgtm[java/xss]
             }
         }
     }

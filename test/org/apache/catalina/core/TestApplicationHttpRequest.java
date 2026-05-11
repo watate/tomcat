@@ -305,7 +305,12 @@ public class TestApplicationHttpRequest extends TomcatBaseTest {
                 } else {
                     w.print(';');
                 }
-                w.print(param.getKey());
+                // Test fixture: this servlet exists solely to echo the parsed
+                // parameter map back to the test client so the test can verify
+                // that parameters were parsed correctly. Output is consumed by
+                // the test (not a browser) and is required to be the raw,
+                // unencoded value.
+                w.print(param.getKey()); // lgtm[java/xss]
                 w.print(':');
                 boolean firstValue = true;
                 for (String value : param.getValue()) {
@@ -315,7 +320,7 @@ public class TestApplicationHttpRequest extends TomcatBaseTest {
                         w.print(',');
                     }
                     w.print('(');
-                    w.print(value);
+                    w.print(value); // lgtm[java/xss]
                     w.print(')');
                 }
             }
