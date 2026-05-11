@@ -475,7 +475,14 @@ public class TestApplicationContextGetRequestDispatcher extends TomcatBaseTest {
             }
             String qs = req.getQueryString();
             if (qs != null) {
-                resp.getWriter().print(qs);
+                // Test fixture: this servlet echoes the request query string
+                // back to the client so the test can assert the exact query
+                // string is preserved across dispatch/forward/include
+                // operations. The query string is supplied by the test itself
+                // (not an untrusted user), and the test asserts on the
+                // verbatim value, so HTML-encoding would alter the bytes and
+                // break the assertions. Suppress for this test fixture only.
+                resp.getWriter().print(qs); // lgtm[java/xss]
             }
         }
     }

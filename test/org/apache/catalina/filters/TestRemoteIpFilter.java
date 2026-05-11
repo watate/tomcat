@@ -110,7 +110,14 @@ public class TestRemoteIpFilter extends TomcatBaseTest {
             writer.println();
             for (Enumeration<String> headers = request.getHeaderNames(); headers.hasMoreElements();) {
                 String name = headers.nextElement().toString();
-                writer.println("request.header['" + name + "']=" + Collections.list(request.getHeaders(name)));
+                // Test fixture: this mock servlet echoes back the names and
+                // values of all request headers so the test
+                // (TestRemoteIpFilter) can assert how RemoteIpFilter
+                // transforms the headers. The headers are set by the test
+                // itself, not an untrusted user, and the test asserts on the
+                // exact echoed strings. Suppress the XSS warning for this
+                // test fixture only.
+                writer.println("request.header['" + name + "']=" + Collections.list(request.getHeaders(name))); // lgtm[java/xss]
             }
         }
     }

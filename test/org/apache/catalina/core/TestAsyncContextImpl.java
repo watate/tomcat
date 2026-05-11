@@ -2336,7 +2336,14 @@ public class TestAsyncContextImpl extends TomcatBaseTest {
             if (DispatcherType.ASYNC.equals(req.getDispatcherType())) {
                 resp.setContentType("text/plain");
                 resp.setCharacterEncoding("UTF-8");
-                resp.getWriter().write(req.getRequestURI());
+                // Test fixture: this servlet echoes back the request URI on
+                // the ASYNC dispatch so the test (Bug 57559) can assert the
+                // URI is preserved across async re-dispatch. The URI is
+                // chosen by the test itself, the response is text/plain, and
+                // the test asserts on the verbatim URI value, so encoding
+                // would break the assertion. Suppress for this test fixture
+                // only.
+                resp.getWriter().write(req.getRequestURI()); // lgtm[java/xss]
             } else {
                 req.startAsync().dispatch();
             }
